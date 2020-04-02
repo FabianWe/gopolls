@@ -14,6 +14,8 @@
 
 package gopolls
 
+import "fmt"
+
 // Voter implements everyone who is allowed to participate in polls.
 //
 // A voter has a name and weight. The weight specifies how much the count of a certain voter counts
@@ -29,4 +31,8 @@ func NewVoter(name string, weight uint64) *Voter {
 		Name:   name,
 		Weight: weight,
 	}
+}
+
+func (voter *Voter) Format(indent string) string {
+	return fmt.Sprintf("%s* %s: %d", indent, voter.Name, voter.Weight)
 }
