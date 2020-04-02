@@ -40,3 +40,17 @@ func ParseWeight(s string) (Weight, error) {
 	}
 	return res, nil
 }
+
+func WeightMin(a, b Weight) Weight {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func WeightMax(a, b Weight) Weight {
+	if a > b {
+		return a
+	}
+	return b
+}
