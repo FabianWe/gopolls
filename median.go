@@ -180,6 +180,9 @@ func (result *MedianResult) GetVotersForValue(referenceValue MedianUnit) []*Vote
 // Note that usually the value 0 should have a majority (because it is the smallest one allowed).
 // If there are no voters or majority is incorrect (for example > total weight sum) MajorityValue might be set to
 // NoMedianUnitValue.
+//
+// This method will also make sure that the polls are sorted (AssureSorted).
+// The runtime of this method is (for n = number of viters) O(n) if already sorted and O(n * log n) if not sorted.
 func (poll *MedianPoll) Tally(majority Weight) *MedianResult {
 	poll.AssureSorted()
 	weightSum := poll.WeightSum()
