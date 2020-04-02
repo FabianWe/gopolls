@@ -101,7 +101,7 @@ func (poll *SchulzePoll) TruncateVoters() []*SchulzeVote {
 	return culprits
 }
 
-func (poll *SchulzePoll) computeD() SchulzeMatrix {
+func (poll *SchulzePoll) ComputeD() SchulzeMatrix {
 	n := poll.NumOptions
 	res := NewSchulzeMatrix(n)
 
@@ -122,7 +122,7 @@ func (poll *SchulzePoll) computeD() SchulzeMatrix {
 	return res
 }
 
-func (poll *SchulzePoll) computeP(d SchulzeMatrix) SchulzeMatrix {
+func (poll *SchulzePoll) ComputeP(d SchulzeMatrix) SchulzeMatrix {
 	n := poll.NumOptions
 	res := NewSchulzeMatrix(n)
 
