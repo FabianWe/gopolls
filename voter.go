@@ -22,17 +22,18 @@ import "fmt"
 // (in normal "elections" this is 1).
 type Voter struct {
 	Name   string
-	Weight uint64
+	Weight Weight
 }
 
 // NewVoter creates a new Voter given its name and weight.
-func NewVoter(name string, weight uint64) *Voter {
+func NewVoter(name string, weight Weight) *Voter {
 	return &Voter{
 		Name:   name,
 		Weight: weight,
 	}
 }
 
+// Format returns a formatted string (one that can be parsed back with the voters parsing methods).
 func (voter *Voter) Format(indent string) string {
 	return fmt.Sprintf("%s* %s: %d", indent, voter.Name, voter.Weight)
 }

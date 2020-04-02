@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -106,7 +105,7 @@ func ParseVotersLine(s string) (*Voter, error) {
 		return nil, NewPollingSyntaxError(nil, "voter line must be of the form \"* voter: weight\"")
 	}
 	name, weightString := match[1], match[2]
-	weight, weightErr := strconv.ParseUint(weightString, 10, 64)
+	weight, weightErr := ParseWeight(weightString)
 	if weightErr != nil {
 		return nil, NewPollingSyntaxError(weightErr, "voter line does not contain a valid integer (got %s)", weightString)
 	}
