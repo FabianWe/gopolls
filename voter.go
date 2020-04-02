@@ -37,3 +37,7 @@ func NewVoter(name string, weight Weight) *Voter {
 func (voter *Voter) Format(indent string) string {
 	return fmt.Sprintf("%s* %s: %d", indent, voter.Name, voter.Weight)
 }
+
+func (voter *Voter) Equals(other *Voter) bool {
+	return voter.Name == other.Name && voter.Weight == other.Weight
+}

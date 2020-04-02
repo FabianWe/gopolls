@@ -76,6 +76,11 @@ func NewMedianPoll(value MedianUnit, votes []*MedianVote) *MedianPoll {
 // It could lead to "weird" results if the value the voters agreed upon was > poll.Value.
 // This way the poll gets filtered by updating the value of such a vote to poll.Value.
 // The result returned contains the original entries with a value > poll.Value (for logging purposes).
+//
+// Note: If you use this method the sorting order should be maintained, everyone who voted with a value > poll.Value
+// should be at the beginning of the slice and are now set to poll.Value. Because all other votes have a value <=
+// poll.Value this should be fine.
+// Thus if the votes are already sorted they should be sorted afterwards too.
 func (poll *MedianPoll) TruncateVoters() []*MedianVote {
 	culprits := make([]*MedianVote, 0)
 	for _, vote := range poll.Votes {
@@ -119,11 +124,13 @@ func (poll *MedianPoll) WeightSum() Weight {
 // MedianResult is the result of evaluating a median poll, see Tally method.
 //
 // The result contains the following information:
+// WeightSum the sum of all weights from the votes.
 // RequiredMajority the majority that was required for the winning value.
 // MajorityValue the highest value that had the RequiredMajority.
 // ValueDetails maps all values that occurred in at least one vote and maps it to the voters that voted for this value.
 // This map can be further analyzed with GetVotersForValue.
 type MedianResult struct {
+	WeightSum        Weight
 	RequiredMajority Weight
 	MajorityValue    MedianUnit
 	ValueDetails     map[MedianUnit][]*Voter
@@ -135,6 +142,7 @@ type MedianResult struct {
 // and ValueDetails to an empty map.
 func NewMedianResult() *MedianResult {
 	return &MedianResult{
+		WeightSum:        NoWeight,
 		RequiredMajority: NoWeight,
 		MajorityValue:    NoMedianUnitValue,
 		ValueDetails:     make(map[MedianUnit][]*Voter),
@@ -182,7 +190,7 @@ func (result *MedianResult) GetVotersForValue(referenceValue MedianUnit) []*Vote
 // NoMedianUnitValue.
 //
 // This method will also make sure that the polls are sorted (AssureSorted).
-// The runtime of this method is (for n = number of viters) O(n) if already sorted and O(n * log n) if not sorted.
+// The runtime of this method is (for n = number of voters) O(n) if already sorted and O(n * log n) if not sorted.
 func (poll *MedianPoll) Tally(majority Weight) *MedianResult {
 	poll.AssureSorted()
 	weightSum := poll.WeightSum()
@@ -191,6 +199,7 @@ func (poll *MedianPoll) Tally(majority Weight) *MedianResult {
 		majority = weightSum / 2
 	}
 	res := NewMedianResult()
+	res.WeightSum = weightSum
 	res.RequiredMajority = majority
 
 	// iterate over the sorted votes and append to the ValueDetails as required
