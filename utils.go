@@ -21,18 +21,18 @@ import (
 )
 
 // Weight is the type used to reference voter weights.
-type Weight uint64
+type Weight uint32
 
 // NoWeight is a value used to signal that a value is not a valid Weight, for example as default argument.
-const NoWeight Weight = math.MaxUint64
+const NoWeight Weight = math.MaxUint32
 
 // ParseWeight parses a Weight from a string.
 //
 // An error is returned if weight is no valid int or is NoWeight.
 func ParseWeight(s string) (Weight, error) {
-	asInt, err := strconv.ParseUint(s, 10, 64)
+	asInt, err := strconv.ParseUint(s, 10, 32)
 	if err != nil {
-		return 0, err
+		return NoWeight, err
 	}
 	res := Weight(asInt)
 	if res == NoWeight {

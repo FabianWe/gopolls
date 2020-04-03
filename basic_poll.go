@@ -117,6 +117,13 @@ func (counter *BasicPollCounter) increase(choice BasicPollAnswer, inc Weight) {
 	}
 }
 
+func (counter *BasicPollCounter) Equals(other *BasicPollCounter) bool {
+	return counter.NumNoes == other.NumNoes &&
+		counter.NumAyes == other.NumAyes &&
+		counter.NumAbstention == other.NumAbstention &&
+		counter.NumInvalid == other.NumInvalid
+}
+
 type BasicPollResult struct {
 	NumberVoters  *BasicPollCounter
 	WeightedVotes *BasicPollCounter
