@@ -106,7 +106,7 @@ func (poll *SchulzePoll) TruncateVoters() []*SchulzeVote {
 	return culprits
 }
 
-func (poll *SchulzePoll) ComputeD() SchulzeMatrix {
+func (poll *SchulzePoll) computeD() SchulzeMatrix {
 	n := poll.NumOptions
 	res := NewSchulzeMatrix(n)
 
@@ -127,7 +127,7 @@ func (poll *SchulzePoll) ComputeD() SchulzeMatrix {
 	return res
 }
 
-func (poll *SchulzePoll) ComputeP(d SchulzeMatrix) SchulzeMatrix {
+func (poll *SchulzePoll) computeP(d SchulzeMatrix) SchulzeMatrix {
 	n := poll.NumOptions
 	res := NewSchulzeMatrix(n)
 
@@ -154,7 +154,7 @@ func (poll *SchulzePoll) ComputeP(d SchulzeMatrix) SchulzeMatrix {
 	return res
 }
 
-func (poll *SchulzePoll) RankP(p SchulzeMatrix) SchulzeWinsList {
+func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 	n := poll.NumOptions
 	// maps: number of wins to candidates with numwins
 	candidateWins := make(map[uint64][]int)
@@ -185,4 +185,24 @@ func (poll *SchulzePoll) RankP(p SchulzeMatrix) SchulzeWinsList {
 		res = append(res, candidateWins[key])
 	}
 	return res
+}
+
+type SchulzeResult struct {
+	D, P         SchulzeMatrix
+	RankedGroups SchulzeWinsList
+}
+
+func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList) *SchulzeResult {
+	return &SchulzeResult{
+		D:            d,
+		P:            p,
+		RankedGroups: rankedGroups,
+	}
+}
+
+func (poll *SchulzePoll) Tally() *SchulzeResult {
+	d := poll.computeD()
+	p := poll.computeP(d)
+	rankedGroups := poll.rankP(p)
+	return NewSchulzeResult(d, p, rankedGroups)
 }

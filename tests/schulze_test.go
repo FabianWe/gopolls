@@ -71,7 +71,8 @@ func TestSchulzeWikiOne(t *testing.T) {
 	votes[7].Ranking = gopolls.SchulzeRanking{3, 2, 5, 4, 1}
 
 	poll := gopolls.NewSchulzePoll(5, votes)
-	d := poll.ComputeD()
+	res := poll.Tally()
+	d := res.D
 	expectedD := gopolls.SchulzeMatrix{
 		{0, 20, 26, 30, 22},
 		{25, 0, 16, 33, 18},
@@ -84,7 +85,7 @@ func TestSchulzeWikiOne(t *testing.T) {
 		return
 	}
 
-	p := poll.ComputeP(d)
+	p := res.P
 	expectedP := gopolls.SchulzeMatrix{
 		{0, 28, 28, 30, 24},
 		{25, 0, 28, 33, 24},
@@ -98,7 +99,7 @@ func TestSchulzeWikiOne(t *testing.T) {
 		return
 	}
 
-	ranking := poll.RankP(p)
+	ranking := res.RankedGroups
 	if len(ranking) != 5 {
 		t.Errorf("Expected ranked matrix of p to contain 5 groups, got %v instead", ranking)
 		return
@@ -143,8 +144,9 @@ func TestSchulzeWikiTwo(t *testing.T) {
 	votes[3].Ranking = gopolls.SchulzeRanking{4, 2, 1, 3}
 
 	poll := gopolls.NewSchulzePoll(4, votes)
+	res := poll.Tally()
 
-	d := poll.ComputeD()
+	d := res.D
 	expectedD := gopolls.SchulzeMatrix{
 		{0, 5, 5, 3},
 		{4, 0, 7, 5},
@@ -156,7 +158,7 @@ func TestSchulzeWikiTwo(t *testing.T) {
 		return
 	}
 
-	p := poll.ComputeP(d)
+	p := res.P
 	expectedP := gopolls.SchulzeMatrix{
 		{0, 5, 5, 5},
 		{5, 0, 7, 5},
@@ -168,7 +170,7 @@ func TestSchulzeWikiTwo(t *testing.T) {
 		return
 	}
 	// winner should be second and fourth option (B & D in the example)
-	ranking := poll.RankP(p)
+	ranking := res.RankedGroups
 	groupOne := ranking[0]
 	expectedGroupOne := []int{1, 3}
 	if !compareCandidateGroup(groupOne, expectedGroupOne) {
