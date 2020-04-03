@@ -33,6 +33,31 @@ func getSchulzeVotesTesting(voters int, weights []gopolls.Weight, numOptions int
 	return res
 }
 
+func compareCandidateGroup(a, b []int) bool {
+	// ignore order ==> create set
+	ma := make(map[int]bool, len(a))
+	mb := make(map[int]bool, len(b))
+
+	for _, value := range a {
+		ma[value] = true
+	}
+
+	for _, value := range b {
+		mb[value] = true
+	}
+
+	if len(ma) != len(mb) {
+		return false
+	}
+
+	for valOne := range ma {
+		if _, has := mb[valOne]; !has {
+			return false
+		}
+	}
+	return true
+}
+
 func TestSchulzeWikiOne(t *testing.T) {
 	// first create all votes, there are 8
 	votes := getSchulzeVotesTesting(8, []gopolls.Weight{5, 5, 8, 3, 7, 2, 7, 8}, 5)
@@ -72,6 +97,42 @@ func TestSchulzeWikiOne(t *testing.T) {
 		t.Errorf("Expected matrix p to be %v, but got %v instead", expectedP, p)
 		return
 	}
+
+	ranking := poll.RankP(p)
+	if len(ranking) != 5 {
+		t.Errorf("Expected ranked matrix of p to contain 5 groups, got %v instead", ranking)
+		return
+	}
+	rankingTests := []struct {
+		gotGroup, expectedGroup []int
+	}{
+		{
+			ranking[0],
+			[]int{4},
+		},
+		{
+			ranking[1],
+			[]int{0},
+		},
+		{
+			ranking[2],
+			[]int{2},
+		},
+		{
+			ranking[3],
+			[]int{1},
+		},
+		{
+			ranking[4],
+			[]int{3},
+		},
+	}
+	for i, tc := range rankingTests {
+		if !compareCandidateGroup(tc.expectedGroup, tc.gotGroup) {
+			t.Errorf("In rankP: Expected in group %d the following list of options: %v. got %v instead",
+				i, tc.expectedGroup, tc.gotGroup)
+		}
+	}
 }
 
 func TestSchulzeWikiTwo(t *testing.T) {
@@ -105,5 +166,12 @@ func TestSchulzeWikiTwo(t *testing.T) {
 	if !expectedP.Equals(p) {
 		t.Errorf("Expected matrix p to be %v, but got %v instead", expectedP, p)
 		return
+	}
+	// winner should be second and fourth option (B & D in the example)
+	ranking := poll.RankP(p)
+	groupOne := ranking[0]
+	expectedGroupOne := []int{1, 3}
+	if !compareCandidateGroup(groupOne, expectedGroupOne) {
+		t.Errorf("Expected ranking of matrix p to be %v, but got %v instead", expectedGroupOne, groupOne)
 	}
 }

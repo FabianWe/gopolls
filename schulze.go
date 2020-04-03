@@ -14,7 +14,10 @@
 
 package gopolls
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type SchulzeMatrix [][]Weight
 
@@ -56,6 +59,8 @@ func NewSchulzeVote(voter *Voter, ranking SchulzeRanking) *SchulzeVote {
 		Ranking: ranking,
 	}
 }
+
+type SchulzeWinsList [][]int
 
 type SchulzePoll struct {
 	NumOptions int
@@ -146,5 +151,38 @@ func (poll *SchulzePoll) ComputeP(d SchulzeMatrix) SchulzeMatrix {
 		}
 	}
 
+	return res
+}
+
+func (poll *SchulzePoll) RankP(p SchulzeMatrix) SchulzeWinsList {
+	n := poll.NumOptions
+	// maps: number of wins to candidates with numwins
+	candidateWins := make(map[uint64][]int)
+	numWinsKeys := make([]uint64, 0)
+	for i := 0; i < n; i++ {
+		var numWins uint64
+		for j := 0; j < n; j++ {
+			if i != j && p[i][j] > p[j][i] {
+				numWins++
+			}
+		}
+		winsList, has := candidateWins[numWins]
+		if !has {
+			winsList = make([]int, 0)
+			numWinsKeys = append(numWinsKeys, numWins)
+		}
+		winsList = append(winsList, i)
+		candidateWins[numWins] = winsList
+	}
+	// now sort the keys according to the one that wins most
+	cmp := func(i, j int) bool {
+		return numWinsKeys[i] > numWinsKeys[j]
+	}
+	sort.Slice(numWinsKeys, cmp)
+	// now create result list, use sorted keys for order
+	res := make(SchulzeWinsList, 0, len(numWinsKeys))
+	for _, key := range numWinsKeys {
+		res = append(res, candidateWins[key])
+	}
 	return res
 }
