@@ -134,6 +134,6 @@ func TestMedianTruncateVoters(t *testing.T) {
 		return
 	}
 	if poll.Votes[0].Value != 150 {
-		t.Errorf("Vote for \"one\" should have been truncated to 150, got %d instead", poll.Votes[0].Value)
+		t.Errorf("Choice for \"one\" should have been truncated to 150, got %d instead", poll.Votes[0].Value)
 	}
 }
