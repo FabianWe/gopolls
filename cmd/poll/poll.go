@@ -1,3 +1,17 @@
+// Copyright 2020 Fabian Wenzelmann <fabianwen@posteo.eu>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -284,37 +298,6 @@ func main() {
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
-}
-
-func readVoters(file string) ([]*gopolls.Voter, error) {
-	// open Voters
-	votersFile, votersFileErr := os.Open(file)
-	if votersFileErr != nil {
-		return nil, votersFileErr
-	}
-	defer votersFile.Close()
-	voters, votersErr := gopolls.ParseVoters(votersFile)
-	if votersErr != nil {
-		return nil, votersErr
-	}
-	fmt.Printf("Read %d Voters\n", len(voters))
-	return voters, nil
-}
-
-func readPolls(file string) (*gopolls.PollSkeletonCollection, error) {
-	pollsFile, pollsFileErr := os.Open(file)
-	if pollsFileErr != nil {
-		return nil, pollsFileErr
-	}
-	defer pollsFile.Close()
-	collection, collectionErr := gopolls.ParseCollectionSkeletons(pollsFile, currencyHandler)
-	if collectionErr != nil {
-		return nil, collectionErr
-	}
-	fmt.Printf("Parsed polls for \"%s\":\n", collection.Title)
-	fmt.Printf("  # Groups = %d\n  # Polls = %d\n",
-		collection.NumGroups(), collection.NumSkeletons())
-	return collection, nil
 }
 
 func runMain() error {
