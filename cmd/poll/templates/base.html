@@ -7,8 +7,6 @@
     <title>Simple Poll Tool</title>
     <link rel="stylesheet" href="/static/pure-release-1.0.1/pure-min.css">
 
-
-
     <!--[if lte IE 8]>
     <link rel="stylesheet" href="/static/layout/css/layouts/side-menu-old-ie.css">
     <![endif]-->
@@ -38,12 +36,7 @@
                 </li>
                 <li class="pure-menu-item">
                     <a href="#" class="pure-menu-link">
-                        Polls
-                        {{if .PollCollection}}
-                            ({{.PollCollection.NumSkeletons}})
-                         {{else}}
-                             (0)
-                        {{end}}
+                        Polls ({{.PollCollection.NumSkeletons}})
                     </a>
                 </li>
                 <li class="pure-menu-item"><a href="#" class="pure-menu-link">Votes</a></li>

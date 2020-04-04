@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/FabianWe/gopolls"
 	"github.com/markbates/pkger"
-	"github.com/shurcooL/httpfs/html/vfstemplate"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -57,11 +56,41 @@ func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 }
 
 func baseTemplates() *template.Template {
-	return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), nil,"base.html"))
+	funcMap := template.FuncMap{
+		"inc": func(i int) int {
+			return i + 1
+		},
+	}
+	tFile, fileErr := pkger.Open("/cmd/poll/templates/base.html")
+	if fileErr != nil {
+		panic(fileErr)
+	}
+	content, readErr := ioutil.ReadAll(tFile)
+	if readErr != nil {
+		panic(readErr)
+	}
+	return template.Must(template.New("base.html").Parse(string(content))).Funcs(funcMap)
+
+	// TODO there seems to be a bug in pkger with Dir, doesn't work this way, that's why we have the rather
+	// "ugly" version above
+	//return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates"), nil,"base.html"))
 }
 
-func readTemplate( base *template.Template, names ...string) *template.Template {
-	return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), template.Must(base.Clone()), names...))
+func readTemplate( base *template.Template, name string) *template.Template {
+	tFile, fileErr := pkger.Open("/cmd/poll/templates/" + name)
+	if fileErr != nil {
+		panic(fileErr)
+	}
+	content, readErr := ioutil.ReadAll(tFile)
+	if readErr != nil {
+		panic(readErr)
+	}
+	base = template.Must(base.Clone())
+	template.Must(base.New(name).Parse(string(content)))
+	return base
+
+	// same as before, sadly there seems to be a bug in pkger
+	// return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), template.Must(base.Clone()), names...))
 }
 
 type mainHandler struct {
@@ -110,6 +139,8 @@ func main() {
 	base := baseTemplates()
 
 	context := mainContext{}
+	context.Voters = append(context.Voters, gopolls.NewVoter("foo", 42))
+	context.Voters = append(context.Voters, gopolls.NewVoter("bar", 21))
 	context.PollCollection = gopolls.NewPollSkeletonCollection("foo")
 	mainH := newMainHandler(base)
 	votersH := newVotersHandler(base)
