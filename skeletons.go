@@ -102,6 +102,10 @@ func NewPollGroup(title string) *PollGroup {
 	}
 }
 
+func (group *PollGroup) NumSkeletons() int {
+	return len(group.Skeletons)
+}
+
 func (group *PollGroup) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
 	res := 0
 	// re-used to store what currently has been written / error occurred
@@ -138,6 +142,18 @@ func (group *PollGroup) getLastPoll() *PollSkeleton {
 type PollSkeletonCollection struct {
 	Title  string
 	Groups []*PollGroup
+}
+
+func (coll *PollSkeletonCollection) NumGroups() int {
+	return len(coll.Groups)
+}
+
+func (coll *PollSkeletonCollection) NumSkeletons() int {
+	res := 0
+	for _, group := range coll.Groups {
+		res += group.NumSkeletons()
+	}
+	return res
 }
 
 func (coll *PollSkeletonCollection) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {

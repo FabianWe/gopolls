@@ -216,7 +216,7 @@ func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserCon
 	return
 }
 
-func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*PollSkeletonCollection, error) {
+func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*PollSkeletonCollection, error) {
 	if currencyParser == nil {
 		currencyParser = SimpleEuroHandler{}
 	}
@@ -292,7 +292,7 @@ func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*Poll
 
 func ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*PollSkeletonCollection, error) {
 	r := strings.NewReader(s)
-	return ParseCollectionSkeletons(currencyParser, r)
+	return ParseCollectionSkeletons(r, currencyParser)
 }
 
 func handleHeadState(line string, context *parserContext) (parserState, error) {
