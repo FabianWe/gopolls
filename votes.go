@@ -14,12 +14,19 @@
 
 package gopolls
 
-import "encoding/csv"
+import (
+	"encoding/csv"
+	"io"
+)
 
 // CSV //
 
 type VotesCSVWriter struct {
 	csv *csv.Writer
+}
+
+func NewVotesCSVWriter(w io.Writer) *VotesCSVWriter {
+	return &VotesCSVWriter{csv: csv.NewWriter(w)}
 }
 
 func (writer *VotesCSVWriter) writeCSVHead(skels []AbstractPollSkeleton) error {
@@ -50,5 +57,9 @@ func (writer *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abs
 	if err := writer.writeCSVHead(skels); err != nil {
 		return err
 	}
-	return writer.writeEmptyRecords(voters, skels)
+	if err := writer.writeEmptyRecords(voters, skels); err != nil {
+		return err
+	}
+	writer.csv.Flush()
+	return writer.csv.Error()
 }

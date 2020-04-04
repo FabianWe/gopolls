@@ -179,6 +179,14 @@ func (coll *PollSkeletonCollection) NumSkeletons() int {
 	return res
 }
 
+func (coll *PollSkeletonCollection) CollectSkeletons() []AbstractPollSkeleton {
+	res := make([]AbstractPollSkeleton, 0, len(coll.Groups))
+	for _, group := range coll.Groups {
+		res = append(res, group.Skeletons...)
+	}
+	return res
+}
+
 func (coll *PollSkeletonCollection) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
 	res := 0
 	// re-used to store what currently has been written / error occurred

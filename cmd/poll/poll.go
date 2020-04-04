@@ -55,16 +55,18 @@ func newRenderContext(mainCtx *mainContext) *renderContext {
 }
 
 type handlerRes struct {
-	Status   int
-	Redirect string
-	Err      error
+	Status      int
+	Redirect    string
+	ContentType string
+	Err         error
 }
 
 func newHandlerRes(status int, err error) handlerRes {
 	return handlerRes{
-		Status:   status,
-		Redirect: "",
-		Err:      err,
+		Status:      status,
+		Redirect:    "",
+		ContentType: "",
+		Err:         err,
 	}
 }
 
@@ -86,6 +88,9 @@ func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 			reflect.TypeOf(h), r.URL)
 		var buff bytes.Buffer
 		handlerRes := h.Handle(context, &buff, r)
+		if handlerRes.ContentType != "" {
+			w.Header().Add("Content-Type", handlerRes.ContentType)
+		}
 		if err := handlerRes.Err; err != nil {
 			log.Println("Unable to write to http response", err)
 			http.Error(w, "Internal error", handlerRes.Status)
@@ -280,6 +285,24 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 	return newHandlerRes(http.StatusInternalServerError, collectionErr)
 }
 
+type exportCSVTemplateHandler struct{}
+
+func newExportCSVTemplateHandler() exportCSVTemplateHandler {
+	return exportCSVTemplateHandler{}
+}
+
+func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	csvWriter := gopolls.NewVotesCSVWriter(buff)
+	// write empty template
+	writeErr := csvWriter.GenerateEmptyTemplate(context.Voters, context.PollCollection.CollectSkeletons())
+	if writeErr != nil {
+		return newHandlerRes(http.StatusInternalServerError, writeErr)
+	}
+	res := newHandlerRes(http.StatusOK, nil)
+	res.ContentType = "text/csv"
+	return res
+}
+
 func main() {
 	pkger.Include("/cmd/poll/templates")
 	pkger.Include("/cmd/poll/static")
@@ -291,9 +314,11 @@ func main() {
 	mainH := newMainHandler(base)
 	votersH := newVotersHandler(base)
 	pollsH := newPollsHandler(base)
+	csvH := newExportCSVTemplateHandler()
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(pkger.Dir("/cmd/poll/static"))))
 	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
 	http.HandleFunc("/polls/", toHandleFunc(pollsH, &context))
+	http.HandleFunc("/votes/csv/", toHandleFunc(csvH, &context))
 	http.HandleFunc("/", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
