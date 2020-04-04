@@ -272,7 +272,9 @@ func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*Poll
 		for _, pollSkel := range group.Skeletons {
 			if asPollSkel, ok := pollSkel.(*PollSkeleton); ok {
 				if len(asPollSkel.Options) < 2 {
-					return nil, fmt.Errorf("poll \"%s\" contains only %d options, expected at most 2",
+					// Not really syntax related (kind of if the formal syntax would specifically say
+					// two), but anyway, should be fine
+					return nil, NewPollingSyntaxError(nil, "poll \"%s\" contains only %d options, expected at most 2",
 						asPollSkel.Name, len(asPollSkel.Options))
 				}
 			}

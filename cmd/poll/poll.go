@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 )
 
 const version = "0.0.1"
@@ -67,6 +68,8 @@ type appHandler interface {
 
 func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Handler %s called for %s\n",
+			reflect.TypeOf(h), r.URL)
 		var buff bytes.Buffer
 		handlerRes := h.Handle(context, &buff, r)
 		if err := handlerRes.Err; err != nil {
@@ -91,6 +94,9 @@ func baseTemplates() *template.Template {
 	funcMap := template.FuncMap{
 		"inc": func(i int) int {
 			return i + 1
+		},
+		"formatCurrency": func(val gopolls.CurrencyValue) string {
+			return currencyHandler.Format(val)
 		},
 	}
 	tFile, fileErr := pkger.Open("/cmd/poll/templates/base.html")
@@ -170,11 +176,13 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 
 	// already clear voters
 	context.Voters = make([]*gopolls.Voter, 0, 0)
+	context.VotersSourceFileName = ""
 	err := r.ParseMultipartForm(10 << 20)
 	if err != nil {
 		return newHandlerRes(http.StatusInternalServerError, err)
 	}
 
+	// Actually check for ErrMissingFile here, but good enough for this
 	file, handler, formErr := r.FormFile("voters-file")
 	if formErr != nil {
 		return newHandlerRes(http.StatusInternalServerError, formErr)
@@ -182,12 +190,13 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 
 	defer file.Close()
 
-	context.VotersSourceFileName = handler.Filename
 	// now try to parse from file
 	voters, votersErr := gopolls.ParseVoters(file)
 	if votersErr == nil {
 		// if it is valid just redirect to voters page again
 		context.Voters = voters
+		context.VotersSourceFileName = handler.Filename
+		log.Printf("Successfuly parsed %d voters from %s\n", len(voters), handler.Filename)
 		res := newRedirectHandlerRes(http.StatusFound, "./")
 		return res
 	}
@@ -198,7 +207,63 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 		return render()
 	}
 	return newHandlerRes(http.StatusInternalServerError, votersErr)
+}
 
+type pollsHandler struct {
+	template *template.Template
+}
+
+func newPollsHandler(base *template.Template) *pollsHandler {
+	t := readTemplate(base, "polls.html")
+	return &pollsHandler{t}
+}
+
+func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	renderContext := newRenderContext(context)
+
+	render := func() handlerRes {
+		return executeTemplate(h.template, renderContext, buff)
+	}
+
+	if r.Method == http.MethodGet {
+		return render()
+	}
+
+	// already clear polls
+	context.PollCollection = gopolls.NewPollSkeletonCollection("dummy")
+	context.CollectionSourceFileName = ""
+
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		return newHandlerRes(http.StatusInternalServerError, err)
+	}
+
+	// Actually check for ErrMissingFile here, but good enough for this
+	file, handler, formErr := r.FormFile("polls-file")
+	if formErr != nil {
+		return newHandlerRes(http.StatusInternalServerError, formErr)
+	}
+
+	defer file.Close()
+
+	// now try to parse
+	collection, collectionErr := gopolls.ParseCollectionSkeletons(file, currencyHandler)
+	if collectionErr == nil {
+		// just redirect to polls page again
+		context.PollCollection = collection
+		context.CollectionSourceFileName = handler.Filename
+		log.Printf("Successfuly parsed %d polls from %s\n", collection.NumSkeletons(), handler.Filename)
+		res := newRedirectHandlerRes(http.StatusFound, "./")
+		return res
+	}
+
+	// if an error occurred: if it is a syntax error render the error, otherwise return internal error
+	if syntaxErr, ok := collectionErr.(gopolls.PollingSyntaxError); ok {
+		renderContext.AdditionalData["error"] = syntaxErr
+		return render()
+	}
+
+	return newHandlerRes(http.StatusInternalServerError, collectionErr)
 }
 
 func main() {
@@ -208,13 +273,13 @@ func main() {
 	base := baseTemplates()
 
 	context := mainContext{}
-	context.Voters = append(context.Voters, gopolls.NewVoter("foo", 42))
-	context.Voters = append(context.Voters, gopolls.NewVoter("bar", 21))
-	context.PollCollection = gopolls.NewPollSkeletonCollection("foo")
+	context.PollCollection = gopolls.NewPollSkeletonCollection("dummy")
 	mainH := newMainHandler(base)
 	votersH := newVotersHandler(base)
+	pollsH := newPollsHandler(base)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(pkger.Dir("/cmd/poll/static"))))
 	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
+	http.HandleFunc("/polls/", toHandleFunc(pollsH, &context))
 	http.HandleFunc("/", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)

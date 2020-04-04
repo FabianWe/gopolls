@@ -20,7 +20,15 @@ import (
 	"reflect"
 )
 
-type AbstractPollSkeleton interface{}
+const (
+	MoneyPollSkeletonType   = "money"
+	GeneralPollSkeletonType = "basic"
+)
+
+type AbstractPollSkeleton interface {
+	SkeletonType() string
+	GetName() string
+}
 
 func DumpAbstractPollSkeleton(skel AbstractPollSkeleton, w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
 	switch typedSkel := skel.(type) {
@@ -49,6 +57,14 @@ func NewMoneyPollSkeleton(name string, value CurrencyValue) *MoneyPollSkeleton {
 func (skel *MoneyPollSkeleton) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
 	currencyString := currencyFormatter.Format(skel.Value)
 	return fmt.Fprintf(w, "### %s\n- %s\n\n", skel.Name, currencyString)
+}
+
+func (skel *MoneyPollSkeleton) SkeletonType() string {
+	return MoneyPollSkeletonType
+}
+
+func (skel *MoneyPollSkeleton) GetName() string {
+	return skel.Name
 }
 
 type PollSkeleton struct {
@@ -87,7 +103,14 @@ func (skel *PollSkeleton) Dump(w io.Writer) (int, error) {
 	res += written
 
 	return res, writeErr
+}
 
+func (skel *PollSkeleton) SkeletonType() string {
+	return GeneralPollSkeletonType
+}
+
+func (skel *PollSkeleton) GetName() string {
+	return skel.Name
 }
 
 type PollGroup struct {

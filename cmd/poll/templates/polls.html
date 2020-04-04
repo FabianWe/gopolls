@@ -1,0 +1,65 @@
+{{block "content" .}}
+    <h2 class="content-subhead">Polls</h2>
+
+    {{if .AdditionalData.error}}
+        <div class="bar error">
+            &#9747; Syntax error: {{.AdditionalData.error}}
+        </div>
+        <br>
+    {{end}}
+
+    {{if .PollCollection.NumSkeletons}}
+        <p>
+            Source file <i>{{.CollectionSourceFileName}}</i>
+        </p>
+        <table class="pure-table pure-table-horizontal pure-table-striped">
+            <thead>
+            <tr>
+                <th>Group / Poll</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Option(s)</th>
+            </tr>
+            </thead>
+            {{range $i, $group := .PollCollection.Groups}}
+                <tr>
+                    <td>{{$i}}</td>
+                    <td colspan="3">
+                        {{$group.Title}}
+                    </td>
+                </tr>
+                {{range $j, $skel := $group.Skeletons}}
+                    <tr>
+                        <td>
+                            {{$i}}.{{$j}}
+                        </td>
+                        <td>{{$skel.GetName}}</td>
+                        <td>{{$skel.SkeletonType}}</td>
+                        <td>
+                            {{if eq $skel.SkeletonType "money"}}
+                                {{formatCurrency $skel.Value}}
+                            {{end}}
+
+                            {{if eq $skel.SkeletonType "basic"}}
+                                {{len $skel.Options}}
+                            {{end}}
+                        </td>
+                    </tr>
+                {{end}}
+            {{end}}
+        </table>
+    {{else}}
+        No polls yet.
+    {{end}}
+
+    <form class="pure-form" method="post" enctype="multipart/form-data">
+        <fieldset>
+            <legend>Choose a new polls file</legend>
+
+            <label for="polls-file">
+                <input type="file" id="polls-file" name="polls-file">
+            </label>
+            <button type="submit" class="pure-button pure-button-primary">Upload</button>
+        </fieldset>
+    </form>
+{{end}}

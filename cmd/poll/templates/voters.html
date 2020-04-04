@@ -10,6 +10,9 @@
 
 
     {{if .Voters}}
+        <p>
+            Source file <i>{{.VotersSourceFileName}}</i>
+        </p>
         <table class="pure-table pure-table-horizontal pure-table-striped">
             <thead>
             <tr>
@@ -18,8 +21,8 @@
                 <th>Weight</th>
             </tr>
             </thead>
-    {{range $i, $voter := .Voters}}
-        <tr>
+            {{range $i, $voter := .Voters}}
+                <tr>
             <td>{{inc $i}}</td>
             <td>{{$voter.Name}}</td>
             <td>{{$voter.Weight}}</td>
