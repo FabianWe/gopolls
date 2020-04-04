@@ -16,8 +16,10 @@ package gopolls
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -146,8 +148,296 @@ func ParseVoters(r io.Reader) ([]*Voter, error) {
 	return res, nil
 }
 
-// ParseVotersString works like ParseVoters but reads from a string.
-func ParseVotersString(s string) ([]*Voter, error) {
+// ParseVotersFromString works like ParseVoters but reads from a string.
+func ParseVotersFromString(s string) ([]*Voter, error) {
 	reader := strings.NewReader(s)
 	return ParseVoters(reader)
+}
+
+// parsing a description
+var headLineRx = regexp.MustCompile(`^\s*#\s+(.+?)\s*$`)
+var groupLineRx = regexp.MustCompile(`^\s*##\s+(.+?)\s*$`)
+var pollLineRx = regexp.MustCompile(`^\s*###\s+(.+?)\s*$`)
+var optionLineRx = regexp.MustCompile(`^\s*[*]\s+(.+?)\s*$`)
+var medianOptionLineRx = regexp.MustCompile(`^\s*[-]\s+(.+?)\s*$`)
+
+func matchFirst(s string, rxs ...*regexp.Regexp) (int, []string) {
+	for i, rx := range rxs {
+		match := rx.FindStringSubmatch(s)
+		if len(match) > 0 {
+			return i, match
+		}
+	}
+	return -1, nil
+}
+
+type PollGroup struct {
+	Title     string
+	Skeletons []AbstractPollSkeleton
+}
+
+func NewPollGroup(title string) *PollGroup {
+	return &PollGroup{
+		Title:     title,
+		Skeletons: make([]AbstractPollSkeleton, 0),
+	}
+}
+
+func (group *PollGroup) getLastPoll() *PollSkeleton {
+	if len(group.Skeletons) == 0 {
+		panic("Internal error: Expected a money poll on parse list, list was empty!")
+	}
+	last := group.Skeletons[len(group.Skeletons)-1]
+	asPoll, ok := last.(*PollSkeleton)
+	if !ok {
+		panic(fmt.Sprintf("Internal error: Expected a poll on parse list, got type %s instead!", reflect.TypeOf(last)))
+	}
+	return asPoll
+}
+
+type ParseResult struct {
+	Title  string
+	Groups []*PollGroup
+}
+
+func NewParseResult(title string) *ParseResult {
+	return &ParseResult{
+		Title:  title,
+		Groups: make([]*PollGroup, 0),
+	}
+}
+
+func (res *ParseResult) getLastPollGroup() *PollGroup {
+	if len(res.Groups) == 0 {
+		panic("Internal error: Expected a group, but group list was empty!")
+	}
+	return res.Groups[len(res.Groups)-1]
+}
+
+type parserState int8
+
+const (
+	// expect the title (#)
+	headState parserState = iota
+	// expect a group (##)
+	groupState
+	// expect a poll name (###)
+	pollState
+	// expect an option (schulze or median, so * or -)
+	// we're in this state right after reading a poll name
+	optionState
+	// expect either a new group or a poll
+	groupOrPollState
+	// expect another option, if any
+	optionalOptionState
+	// invalid state from which we should never continue
+	invalidState
+)
+
+type parserContext struct {
+	*ParseResult
+	lastPollName   string
+	currencyParser CurrencyParser
+}
+
+func newParserContext(currencyParser CurrencyParser) *parserContext {
+	return &parserContext{
+		ParseResult:    NewParseResult(""),
+		lastPollName:   "",
+		currencyParser: currencyParser,
+	}
+}
+
+type stateHandleFunc func(line string, context *parserContext) (parserState, error)
+
+func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserContext) (next parserState, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("internal parsing error: %s", r)
+		}
+	}()
+	next, err = f(line, context)
+	return
+}
+
+func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*ParseResult, error) {
+	if currencyParser == nil {
+		currencyParser = SimpleEuroHandler{}
+	}
+	// create context to pass around
+	context := newParserContext(currencyParser)
+	// initial state is head
+	state := headState
+	// read lines from scanner
+	scanner := bufio.NewScanner(r)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+		// we can trim the line, no construct needs whitespaces in front / back
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// find out which handler to call
+		var handler stateHandleFunc
+		switch state {
+		case headState:
+			handler = handleHeadState
+		case groupState:
+			handler = handleGroupState
+		case pollState:
+			handler = handlePollState
+		case optionState:
+			handler = handleOptionState
+		case groupOrPollState:
+			handler = handleGroupOrPollState
+		case optionalOptionState:
+			handler = handleOptionalOptionState
+		default:
+			return nil, errors.New("internal error: Parser entered an invalid state")
+		}
+		// call handler and also recover from all panics
+		nextState, stateErr := runSecureStateHandleFunc(handler, line, context)
+		if stateErr != nil {
+			return nil, convertParserErr(stateErr, lineNum)
+		}
+		state = nextState
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return nil, scanErr
+	}
+
+	// no test if in all "basic" skeletons there are at least two options, everything
+	// else doesn't make sense
+	res := context.ParseResult
+
+	for _, group := range res.Groups {
+		for _, pollSkel := range group.Skeletons {
+			if asPollSkel, ok := pollSkel.(*PollSkeleton); ok {
+				if len(asPollSkel.Options) < 2 {
+					return nil, fmt.Errorf("poll \"%s\" contains only %d options, expected at most 2",
+						asPollSkel.Name, len(asPollSkel.Options))
+				}
+			}
+		}
+	}
+
+	// now test if we're in a not valid end state
+	switch state {
+	case headState:
+		return nil, NewPollingSyntaxError(nil, "no title found \"# <TITLE>\"")
+	case optionState:
+		return nil, NewPollingSyntaxError(nil, "found beginning of a poll but no option was given")
+	}
+
+	return res, nil
+}
+
+func ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*ParseResult, error) {
+	r := strings.NewReader(s)
+	return ParseCollectionSkeletons(currencyParser, r)
+}
+
+func handleHeadState(line string, context *parserContext) (parserState, error) {
+	match := headLineRx.FindStringSubmatch(line)
+	if len(match) == 0 {
+		return invalidState, NewPollingSyntaxError(nil, "invalid head line, must be of form \"# <TITLE>\"")
+	}
+	if context.Title != "" {
+		panic("Internal error: Expected that no title was set yet!")
+	}
+	context.Title = match[1]
+	return groupState, nil
+}
+
+func handleGroupState(line string, context *parserContext) (parserState, error) {
+	match := groupLineRx.FindStringSubmatch(line)
+	if len(match) == 0 {
+		return invalidState, NewPollingSyntaxError(nil, "invalid group line, must be of the form \"## <GROUP>\"")
+	}
+	group := NewPollGroup(match[1])
+	context.Groups = append(context.Groups, group)
+	return pollState, nil
+}
+
+func handlePollState(line string, context *parserContext) (parserState, error) {
+	match := pollLineRx.FindStringSubmatch(line)
+	if len(match) == 0 {
+		return invalidState, NewPollingSyntaxError(nil, "invalid poll line, must be of the form \"### <POLL>\"")
+	}
+	context.lastPollName = match[1]
+	return optionState, nil
+}
+
+func handleOptionState(line string, context *parserContext) (parserState, error) {
+	// just some assertions to be sure
+	if context.lastPollName == "" {
+		panic("Internal error: Trying to parse poll option, but no poll was parsed first")
+	}
+	group := context.getLastPollGroup()
+	// can be either schulze or median, try both
+	index, match := matchFirst(line, optionLineRx, medianOptionLineRx)
+	switch index {
+	case -1:
+		return invalidState, NewPollingSyntaxError(nil, "invalid option line, must either be a standard option \"*\" or money value \"-}")
+	case 0:
+		// add a new skeleton with this option
+		skeleton := NewPollSkeleton(context.lastPollName)
+		skeleton.Options = append(skeleton.Options, match[1])
+		group.Skeletons = append(group.Skeletons, skeleton)
+		return optionalOptionState, nil
+	case 1:
+		// try to parse currency with parser from context
+		currency, currencyErr := context.currencyParser.Parse(match[1])
+		if currencyErr != nil {
+			return invalidState, NewPollingSyntaxError(currencyErr, "Can't parse money value")
+		}
+		// add a new skeleton
+		skeleton := NewMoneyPollSkeleton(context.lastPollName, currency)
+		group.Skeletons = append(group.Skeletons, skeleton)
+		return groupOrPollState, nil
+	default:
+		panic("Internal error: matchFirst returned an invalid index")
+	}
+}
+
+func handleGroupOrPollState(line string, context *parserContext) (parserState, error) {
+	// first try group, if this fails (err != nil) try poll state
+	// note that these methods don't change the context if err != nil, so this is fine
+	groupRes, groupErr := handleGroupState(line, context)
+	if groupErr == nil {
+		// success
+		return groupRes, nil
+	}
+	// not a group, then try poll
+	pollRes, pollErr := handlePollState(line, context)
+	if pollErr == nil {
+		return pollRes, nil
+	}
+	// both failed, raise an error
+	return invalidState, NewPollingSyntaxError(nil, "expected either group or poll")
+}
+
+func handleOptionalOptionState(line string, context *parserContext) (parserState, error) {
+	// now we have to parse either another option for the poll or a new group or a new poll
+	// we use the other handler function for this (handleGroupOrPollState)
+	// note that handleGroupOrPollState doesn't change the context if err != nil, so this is fine
+
+	// first try to parse another option
+	match := optionLineRx.FindStringSubmatch(line)
+	if len(match) > 0 {
+		// just append to last poll
+		poll := context.getLastPollGroup().getLastPoll()
+		poll.Options = append(poll.Options, match[1])
+		return optionalOptionState, nil
+	}
+	// now it must be group or new poll
+	handleRes, handleErr := handleGroupOrPollState(line, context)
+	if handleErr == nil {
+		// everything okay
+		return handleRes, nil
+	}
+	// error
+	return invalidState, NewPollingSyntaxError(nil, "expected either poll option, group or poll")
 }
