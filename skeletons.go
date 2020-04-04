@@ -37,7 +37,7 @@ func DumpAbstractPollSkeleton(skel AbstractPollSkeleton, w io.Writer, currencyFo
 	case *PollSkeleton:
 		return typedSkel.Dump(w)
 	default:
-		return 0, fmt.Errorf("Skeleton must be either *MoneyPollSkeleton or *PollSkeleton, got type %s",
+		return 0, fmt.Errorf("skeleton must be either *MoneyPollSkeleton or *PollSkeleton, got type %s",
 			reflect.TypeOf(skel))
 	}
 }
@@ -185,6 +185,34 @@ func (coll *PollSkeletonCollection) CollectSkeletons() []AbstractPollSkeleton {
 		res = append(res, group.Skeletons...)
 	}
 	return res
+}
+
+func (coll *PollSkeletonCollection) HasDuplicateSkeleton() (string, bool) {
+	nameSet := make(map[string]struct{}, len(coll.Groups))
+	for _, group := range coll.Groups {
+		for _, skel := range group.Skeletons {
+			name := skel.GetName()
+			if _, has := nameSet[name]; has {
+				return name, true
+			}
+			nameSet[name] = struct{}{}
+		}
+	}
+	return "", false
+}
+
+func (coll *PollSkeletonCollection) SkeletonsToMap() (map[string]AbstractPollSkeleton, error) {
+	res := make(map[string]AbstractPollSkeleton, len(coll.Groups))
+	for _, group := range coll.Groups {
+		for _, skel := range group.Skeletons {
+			name := skel.GetName()
+			if _, has := res[name]; has {
+				return nil, fmt.Errorf("duplicate entry for poll %s", name)
+			}
+			res[name] = skel
+		}
+	}
+	return res, nil
 }
 
 func (coll *PollSkeletonCollection) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
