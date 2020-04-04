@@ -195,19 +195,19 @@ func (group *PollGroup) getLastPoll() *PollSkeleton {
 	return asPoll
 }
 
-type ParseResult struct {
+type PollSkeletonCollection struct {
 	Title  string
 	Groups []*PollGroup
 }
 
-func NewParseResult(title string) *ParseResult {
-	return &ParseResult{
+func NewParseResult(title string) *PollSkeletonCollection {
+	return &PollSkeletonCollection{
 		Title:  title,
 		Groups: make([]*PollGroup, 0),
 	}
 }
 
-func (res *ParseResult) getLastPollGroup() *PollGroup {
+func (res *PollSkeletonCollection) getLastPollGroup() *PollGroup {
 	if len(res.Groups) == 0 {
 		panic("Internal error: Expected a group, but group list was empty!")
 	}
@@ -235,16 +235,16 @@ const (
 )
 
 type parserContext struct {
-	*ParseResult
+	*PollSkeletonCollection
 	lastPollName   string
 	currencyParser CurrencyParser
 }
 
 func newParserContext(currencyParser CurrencyParser) *parserContext {
 	return &parserContext{
-		ParseResult:    NewParseResult(""),
-		lastPollName:   "",
-		currencyParser: currencyParser,
+		PollSkeletonCollection: NewParseResult(""),
+		lastPollName:           "",
+		currencyParser:         currencyParser,
 	}
 }
 
@@ -260,7 +260,7 @@ func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserCon
 	return
 }
 
-func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*ParseResult, error) {
+func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*PollSkeletonCollection, error) {
 	if currencyParser == nil {
 		currencyParser = SimpleEuroHandler{}
 	}
@@ -310,7 +310,7 @@ func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*Pars
 
 	// no test if in all "basic" skeletons there are at least two options, everything
 	// else doesn't make sense
-	res := context.ParseResult
+	res := context.PollSkeletonCollection
 
 	for _, group := range res.Groups {
 		for _, pollSkel := range group.Skeletons {
@@ -334,7 +334,7 @@ func ParseCollectionSkeletons(currencyParser CurrencyParser, r io.Reader) (*Pars
 	return res, nil
 }
 
-func ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*ParseResult, error) {
+func ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*PollSkeletonCollection, error) {
 	r := strings.NewReader(s)
 	return ParseCollectionSkeletons(currencyParser, r)
 }
