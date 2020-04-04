@@ -16,10 +16,23 @@ package gopolls
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 )
 
 type AbstractPollSkeleton interface{}
+
+func DumpAbstractPollSkeleton(skel AbstractPollSkeleton, w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
+	switch typedSkel := skel.(type) {
+	case *MoneyPollSkeleton:
+		return typedSkel.Dump(w, currencyFormatter)
+	case *PollSkeleton:
+		return typedSkel.Dump(w)
+	default:
+		return 0, fmt.Errorf("Skeleton must be either *MoneyPollSkeleton or *PollSkeleton, got type %s",
+			reflect.TypeOf(skel))
+	}
+}
 
 type MoneyPollSkeleton struct {
 	Name  string
@@ -31,6 +44,11 @@ func NewMoneyPollSkeleton(name string, value CurrencyValue) *MoneyPollSkeleton {
 		Name:  name,
 		Value: value,
 	}
+}
+
+func (skel *MoneyPollSkeleton) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
+	currencyString := currencyFormatter.Format(skel.Value)
+	return fmt.Fprintf(w, "### %s\n- %s\n\n", skel.Name, currencyString)
 }
 
 type PollSkeleton struct {
@@ -45,6 +63,33 @@ func NewPollSkeleton(name string) *PollSkeleton {
 	}
 }
 
+func (skel *PollSkeleton) Dump(w io.Writer) (int, error) {
+	res := 0
+	// re-used to store what currently has been written / error occurred
+	written := 0
+	var writeErr error
+
+	written, writeErr = fmt.Fprintf(w, "### %s\n", skel.Name)
+	res += written
+	if writeErr != nil {
+		return res, writeErr
+	}
+
+	for _, option := range skel.Options {
+		written, writeErr = fmt.Fprintf(w, "* %s\n", option)
+		res += written
+		if writeErr != nil {
+			return res, writeErr
+		}
+	}
+
+	written, writeErr = fmt.Fprintln(w)
+	res += written
+
+	return res, writeErr
+
+}
+
 type PollGroup struct {
 	Title     string
 	Skeletons []AbstractPollSkeleton
@@ -55,6 +100,27 @@ func NewPollGroup(title string) *PollGroup {
 		Title:     title,
 		Skeletons: make([]AbstractPollSkeleton, 0),
 	}
+}
+
+func (group *PollGroup) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
+	res := 0
+	// re-used to store what currently has been written / error occurred
+	written := 0
+	var writeErr error
+	written, writeErr = fmt.Fprintf(w, "## %s\n\n", group.Title)
+	res += written
+	if writeErr != nil {
+		return res, writeErr
+	}
+	for _, pollSkel := range group.Skeletons {
+		written, writeErr = DumpAbstractPollSkeleton(pollSkel, w, currencyFormatter)
+		res += written
+		if writeErr != nil {
+			return res, writeErr
+		}
+	}
+
+	return res, writeErr
 }
 
 func (group *PollGroup) getLastPoll() *PollSkeleton {
@@ -74,6 +140,28 @@ type PollSkeletonCollection struct {
 	Groups []*PollGroup
 }
 
+func (coll *PollSkeletonCollection) Dump(w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
+	res := 0
+	// re-used to store what currently has been written / error occurred
+	written := 0
+	var writeErr error
+	written, writeErr = fmt.Fprintf(w, "# %s\n\n", coll.Title)
+	res += written
+	if writeErr != nil {
+		return res, writeErr
+	}
+
+	for _, group := range coll.Groups {
+		written, writeErr = group.Dump(w, currencyFormatter)
+		res += written
+		if writeErr != nil {
+			return res, writeErr
+		}
+	}
+
+	return res, writeErr
+}
+
 func NewPollSkeletonCollection(title string) *PollSkeletonCollection {
 	return &PollSkeletonCollection{
 		Title:  title,
@@ -81,9 +169,9 @@ func NewPollSkeletonCollection(title string) *PollSkeletonCollection {
 	}
 }
 
-func (res *PollSkeletonCollection) getLastPollGroup() *PollGroup {
-	if len(res.Groups) == 0 {
+func (coll *PollSkeletonCollection) getLastPollGroup() *PollGroup {
+	if len(coll.Groups) == 0 {
 		panic("Internal error: Expected a group, but group list was empty!")
 	}
-	return res.Groups[len(res.Groups)-1]
+	return coll.Groups[len(coll.Groups)-1]
 }
