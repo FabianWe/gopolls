@@ -60,17 +60,16 @@ func baseTemplates() *template.Template {
 	return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), nil,"base.html"))
 }
 
+func readTemplate( base *template.Template, names ...string) *template.Template {
+	return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), template.Must(base.Clone()), names...))
+}
+
 type mainHandler struct {
 	template *template.Template
 }
 
-//func newMainHandler() *mainHandler {
-//	t := readPkgTemplate("/cmd/poll/templates/main.html")
-//	return &mainHandler{t}
-//}
-
 func newMainHandler(base *template.Template) *mainHandler {
-	t := template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), template.Must(base.Clone()), "index.html"))
+	t := readTemplate(base, "index.html")
 	return &mainHandler{t}
 }
 
@@ -84,7 +83,25 @@ func (h *mainHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.R
 	return http.StatusOK, nil
 }
 
+type votersHandler struct {
+	template *template.Template
+}
 
+func newVotersHandler(base *template.Template) *votersHandler {
+	t := readTemplate(base, "voters.html")
+	return &votersHandler{t}
+}
+
+func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) (int, error) {
+	data := &renderContext{context}
+
+	templateErr := h.template.Execute(buff, data)
+	if templateErr != nil {
+		return http.StatusInternalServerError, templateErr
+	}
+
+	return http.StatusOK, nil
+}
 
 func main() {
 	pkger.Include("/cmd/poll/templates")
@@ -95,7 +112,9 @@ func main() {
 	context := mainContext{}
 	context.PollCollection = gopolls.NewPollSkeletonCollection("foo")
 	mainH := newMainHandler(base)
+	votersH := newVotersHandler(base)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(pkger.Dir("/cmd/poll/static"))))
+	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
 	http.HandleFunc("/", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
