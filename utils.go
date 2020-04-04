@@ -54,3 +54,13 @@ func WeightMax(a, b Weight) Weight {
 	}
 	return b
 }
+
+type DuplicateError string
+
+func NewDuplicateError(msg string) DuplicateError {
+	return DuplicateError(msg)
+}
+
+func (err DuplicateError) Error() string {
+	return string(err)
+}

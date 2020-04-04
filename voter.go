@@ -44,7 +44,7 @@ func (voter *Voter) Equals(other *Voter) bool {
 	return voter.Name == other.Name && voter.Weight == other.Weight
 }
 
-func HasDuplicate(voters []*Voter) (string, bool) {
+func HasDuplicateVoters(voters []*Voter) (string, bool) {
 	nameSet := make(map[string]struct{}, len(voters))
 	for _, voter := range voters {
 		if _, has := nameSet[voter.Name]; has {
@@ -59,7 +59,7 @@ func VotersToMap(voters []*Voter) (map[string]*Voter, error) {
 	res := make(map[string]*Voter, len(voters))
 	for _, voter := range voters {
 		if _, has := res[voter.Name]; has {
-			return nil, fmt.Errorf("duplicate entry for user %s", voter.Name)
+			return nil, NewDuplicateError(fmt.Sprintf("duplicate entry for user %s", voter.Name))
 		}
 		res[voter.Name] = voter
 	}

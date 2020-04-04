@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"time"
 )
 
 const version = "0.0.1"
@@ -87,7 +88,10 @@ func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 		log.Printf("Handler %s called for %s\n",
 			reflect.TypeOf(h), r.URL)
 		var buff bytes.Buffer
+		start := time.Now()
 		handlerRes := h.Handle(context, &buff, r)
+		delta := time.Since(start)
+		log.Println("Handler done after", delta)
 		if handlerRes.ContentType != "" {
 			w.Header().Add("Content-Type", handlerRes.ContentType)
 		}
@@ -211,6 +215,14 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 
 	// now try to parse from file
 	voters, votersErr := gopolls.ParseVoters(file)
+
+	if votersErr == nil {
+		// check for duplicate names, if there are any set error to a duplicate error
+		if name, hasDuplicates := gopolls.HasDuplicateVoters(voters); hasDuplicates {
+			votersErr = gopolls.NewDuplicateError(fmt.Sprintf("duplicate voter name %s", name))
+		}
+	}
+
 	if votersErr == nil {
 		// if it is valid just redirect to voters page again
 		context.Voters = voters
@@ -220,12 +232,16 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 		return res
 	}
 
-	// if an error occurred: if it is a syntax error render the error, otherwise return internal error
-	if syntaxErr, ok := votersErr.(gopolls.PollingSyntaxError); ok {
-		renderContext.AdditionalData["error"] = syntaxErr
+	// if an error occurred: if it is a syntax error or duplicate error render the error, otherwise return internal
+	// error
+	switch votersErr.(type) {
+	case gopolls.PollingSyntaxError, gopolls.DuplicateError:
+		renderContext.AdditionalData["error"] = votersErr
 		return render()
+	default:
+		return newHandlerRes(http.StatusInternalServerError, votersErr)
 	}
-	return newHandlerRes(http.StatusInternalServerError, votersErr)
+
 }
 
 type pollsHandler struct {
@@ -267,6 +283,14 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 
 	// now try to parse
 	collection, collectionErr := gopolls.ParseCollectionSkeletons(file, currencyHandler)
+
+	if collectionErr == nil {
+		// now check for duplicate names in the polls, if there are any set error to a duplicate error
+		if name, hasDuplicates := collection.HasDuplicateSkeleton(); hasDuplicates {
+			collectionErr = gopolls.NewDuplicateError(fmt.Sprintf("duplicate poll name %s", name))
+		}
+	}
+
 	if collectionErr == nil {
 		// just redirect to polls page again
 		context.PollCollection = collection

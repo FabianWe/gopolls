@@ -207,7 +207,7 @@ func (coll *PollSkeletonCollection) SkeletonsToMap() (map[string]AbstractPollSke
 		for _, skel := range group.Skeletons {
 			name := skel.GetName()
 			if _, has := res[name]; has {
-				return nil, fmt.Errorf("duplicate entry for poll %s", name)
+				return nil, NewDuplicateError(fmt.Sprintf("duplicate entry for poll %s", name))
 			}
 			res[name] = skel
 		}
