@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"regexp"
 	"strings"
 )
@@ -171,49 +170,6 @@ func matchFirst(s string, rxs ...*regexp.Regexp) (int, []string) {
 	return -1, nil
 }
 
-type PollGroup struct {
-	Title     string
-	Skeletons []AbstractPollSkeleton
-}
-
-func NewPollGroup(title string) *PollGroup {
-	return &PollGroup{
-		Title:     title,
-		Skeletons: make([]AbstractPollSkeleton, 0),
-	}
-}
-
-func (group *PollGroup) getLastPoll() *PollSkeleton {
-	if len(group.Skeletons) == 0 {
-		panic("Internal error: Expected a money poll on parse list, list was empty!")
-	}
-	last := group.Skeletons[len(group.Skeletons)-1]
-	asPoll, ok := last.(*PollSkeleton)
-	if !ok {
-		panic(fmt.Sprintf("Internal error: Expected a poll on parse list, got type %s instead!", reflect.TypeOf(last)))
-	}
-	return asPoll
-}
-
-type PollSkeletonCollection struct {
-	Title  string
-	Groups []*PollGroup
-}
-
-func NewParseResult(title string) *PollSkeletonCollection {
-	return &PollSkeletonCollection{
-		Title:  title,
-		Groups: make([]*PollGroup, 0),
-	}
-}
-
-func (res *PollSkeletonCollection) getLastPollGroup() *PollGroup {
-	if len(res.Groups) == 0 {
-		panic("Internal error: Expected a group, but group list was empty!")
-	}
-	return res.Groups[len(res.Groups)-1]
-}
-
 type parserState int8
 
 const (
@@ -242,7 +198,7 @@ type parserContext struct {
 
 func newParserContext(currencyParser CurrencyParser) *parserContext {
 	return &parserContext{
-		PollSkeletonCollection: NewParseResult(""),
+		PollSkeletonCollection: NewPollSkeletonCollection(""),
 		lastPollName:           "",
 		currencyParser:         currencyParser,
 	}
