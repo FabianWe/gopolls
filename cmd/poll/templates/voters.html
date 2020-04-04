@@ -1,14 +1,23 @@
 {{block "content" .}}
-<h2 class="content-subhead">Voters</h2>
-{{if .Voters}}
-    <table class="pure-table pure-table-horizontal pure-table-striped">
-        <thead>
-        <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>Weight</th>
-        </tr>
-        </thead>
+    <h2 class="content-subhead">Voters</h2>
+
+    {{if .AdditionalData.error}}
+        <div class="bar error">
+            &#9747; Syntax error: {{.AdditionalData.error}}
+        </div>
+        <br>
+    {{end}}
+
+
+    {{if .Voters}}
+        <table class="pure-table pure-table-horizontal pure-table-striped">
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Weight</th>
+            </tr>
+            </thead>
     {{range $i, $voter := .Voters}}
         <tr>
             <td>{{inc $i}}</td>
@@ -20,4 +29,16 @@
 {{else}}
     No voters yet.
 {{end}}
+
+    <form class="pure-form" method="post" enctype="multipart/form-data">
+        <fieldset>
+            <legend>Choose a new voters file</legend>
+
+            <label for="voters-file">
+                <input type="file" id="voters-file" name="voters-file">
+            </label>
+            <button type="submit" class="pure-button pure-button-primary">Upload</button>
+        </fieldset>
+    </form>
+
 {{end}}

@@ -7,6 +7,7 @@ import (
 	"github.com/FabianWe/gopolls"
 	"github.com/markbates/pkger"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -20,34 +21,65 @@ var currencyHandler = gopolls.SimpleEuroHandler{}
 type mainContext struct {
 	Voters         []*gopolls.Voter
 	PollCollection *gopolls.PollSkeletonCollection
+	// in case voters were loaded from a file this value is set to the name
+	VotersSourceFileName string
 	// in case collection was loaded from a file this value is set to this path
-	CollectionSourcePath string
+	CollectionSourceFileName string
 }
 
 type renderContext struct {
 	*mainContext
+	AdditionalData map[string]interface{}
+}
+
+func newRenderContext(mainCtx *mainContext) *renderContext {
+	return &renderContext{
+		mainContext:    mainCtx,
+		AdditionalData: make(map[string]interface{}),
+	}
+}
+
+type handlerRes struct {
+	Status   int
+	Redirect string
+	Err      error
+}
+
+func newHandlerRes(status int, err error) handlerRes {
+	return handlerRes{
+		Status:   status,
+		Redirect: "",
+		Err:      err,
+	}
+}
+
+func newRedirectHandlerRes(status int, redirect string) handlerRes {
+	return handlerRes{
+		Status:   status,
+		Redirect: redirect,
+		Err:      nil,
+	}
 }
 
 type appHandler interface {
-	Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) (int, error)
+	Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes
 }
 
 func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var buff bytes.Buffer
-		statusCode, err := h.Handle(context, &buff, r)
-		if err != nil {
+		handlerRes := h.Handle(context, &buff, r)
+		if err := handlerRes.Err; err != nil {
 			log.Println("Unable to write to http response", err)
-			http.Error(w, "Internal error", statusCode)
+			http.Error(w, "Internal error", handlerRes.Status)
 			return
 		}
-		content, contentErr := ioutil.ReadAll(&buff)
-		if contentErr != nil {
-			log.Println("error:", contentErr)
-			http.Error(w, "Internal error", http.StatusInternalServerError)
+		if handlerRes.Redirect != "" {
+			http.Redirect(w, r, handlerRes.Redirect, handlerRes.Status)
 			return
 		}
-		_, writeErr := w.Write(content)
+
+		_, writeErr := io.Copy(w, &buff)
 		if writeErr != nil {
 			log.Println("Unable to write to http response", writeErr)
 			return
@@ -76,7 +108,7 @@ func baseTemplates() *template.Template {
 	//return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates"), nil,"base.html"))
 }
 
-func readTemplate( base *template.Template, name string) *template.Template {
+func readTemplate(base *template.Template, name string) *template.Template {
 	tFile, fileErr := pkger.Open("/cmd/poll/templates/" + name)
 	if fileErr != nil {
 		panic(fileErr)
@@ -93,6 +125,15 @@ func readTemplate( base *template.Template, name string) *template.Template {
 	// return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), template.Must(base.Clone()), names...))
 }
 
+func executeTemplate(t *template.Template, context *renderContext, buff *bytes.Buffer) handlerRes {
+	templateErr := t.Execute(buff, context)
+	if templateErr != nil {
+		return newHandlerRes(http.StatusInternalServerError, templateErr)
+	}
+
+	return newHandlerRes(http.StatusOK, nil)
+}
+
 type mainHandler struct {
 	template *template.Template
 }
@@ -102,14 +143,9 @@ func newMainHandler(base *template.Template) *mainHandler {
 	return &mainHandler{t}
 }
 
-func (h *mainHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) (int, error) {
-	data := &renderContext{context}
-	templateErr := h.template.Execute(buff, data)
-	if templateErr != nil {
-		return http.StatusInternalServerError, templateErr
-	}
-
-	return http.StatusOK, nil
+func (h *mainHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	renderContext := newRenderContext(context)
+	return executeTemplate(h.template, renderContext, buff)
 }
 
 type votersHandler struct {
@@ -121,15 +157,48 @@ func newVotersHandler(base *template.Template) *votersHandler {
 	return &votersHandler{t}
 }
 
-func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) (int, error) {
-	data := &renderContext{context}
+func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	renderContext := newRenderContext(context)
 
-	templateErr := h.template.Execute(buff, data)
-	if templateErr != nil {
-		return http.StatusInternalServerError, templateErr
+	render := func() handlerRes {
+		return executeTemplate(h.template, renderContext, buff)
 	}
 
-	return http.StatusOK, nil
+	if r.Method == http.MethodGet {
+		return render()
+	}
+
+	// already clear voters
+	context.Voters = make([]*gopolls.Voter, 0, 0)
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		return newHandlerRes(http.StatusInternalServerError, err)
+	}
+
+	file, handler, formErr := r.FormFile("voters-file")
+	if formErr != nil {
+		return newHandlerRes(http.StatusInternalServerError, formErr)
+	}
+
+	defer file.Close()
+
+	context.VotersSourceFileName = handler.Filename
+	// now try to parse from file
+	voters, votersErr := gopolls.ParseVoters(file)
+	if votersErr == nil {
+		// if it is valid just redirect to voters page again
+		context.Voters = voters
+		res := newRedirectHandlerRes(http.StatusFound, "./")
+		return res
+	}
+
+	// if an error occurred: if it is a syntax error render the error, otherwise return internal error
+	if syntaxErr, ok := votersErr.(gopolls.PollingSyntaxError); ok {
+		renderContext.AdditionalData["error"] = syntaxErr
+		return render()
+	}
+	return newHandlerRes(http.StatusInternalServerError, votersErr)
+
 }
 
 func main() {
