@@ -122,7 +122,7 @@ func baseTemplates() *template.Template {
 			return currencyHandler.Format(val)
 		},
 	}
-	tFile, fileErr := pkger.Open("/cmd/poll/templates/base.html")
+	tFile, fileErr := pkger.Open("/cmd/poll/templates/base.gohtml")
 	if fileErr != nil {
 		panic(fileErr)
 	}
@@ -130,11 +130,11 @@ func baseTemplates() *template.Template {
 	if readErr != nil {
 		panic(readErr)
 	}
-	return template.Must(template.New("base.html").Parse(string(content))).Funcs(funcMap)
+	return template.Must(template.New("base.gohtml").Parse(string(content))).Funcs(funcMap)
 
 	// TODO there seems to be a bug in pkger with Dir, doesn't work this way, that's why we have the rather
 	// "ugly" version above
-	//return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates"), nil,"base.html"))
+	//return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates"), nil,"base.gohtml"))
 }
 
 func readTemplate(base *template.Template, name string) *template.Template {
@@ -168,7 +168,7 @@ type mainHandler struct {
 }
 
 func newMainHandler(base *template.Template) *mainHandler {
-	t := readTemplate(base, "index.html")
+	t := readTemplate(base, "index.gohtml")
 	return &mainHandler{t}
 }
 
@@ -182,7 +182,7 @@ type votersHandler struct {
 }
 
 func newVotersHandler(base *template.Template) *votersHandler {
-	t := readTemplate(base, "voters.html")
+	t := readTemplate(base, "voters.gohtml")
 	return &votersHandler{t}
 }
 
@@ -249,7 +249,7 @@ type pollsHandler struct {
 }
 
 func newPollsHandler(base *template.Template) *pollsHandler {
-	t := readTemplate(base, "polls.html")
+	t := readTemplate(base, "polls.gohtml")
 	return &pollsHandler{t}
 }
 
