@@ -47,6 +47,8 @@ func NewDefaultSkeletonConverter(convertToBasic bool) SkeletonConverter {
 	}
 }
 
+var DefaultSkeletonConverter = NewDefaultSkeletonConverter(true)
+
 func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSkeleton) (AbstractPoll, error) {
 	defaultVotesSize := 50
 	switch typedSkel := skel.(type) {
@@ -77,4 +79,21 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 		return nil, NewSkelTypeConversionError("Only money polls (median) and basic polls (e.g. normal poll, scholze are supported). Got type %s",
 			reflect.TypeOf(skel))
 	}
+}
+
+func ConvertSkeletonsToPolls(skeletons []AbstractPollSkeleton, converterFunction SkeletonConverter) ([]AbstractPoll, error) {
+	if converterFunction == nil {
+		converterFunction = DefaultSkeletonConverter
+	}
+	res := make([]AbstractPoll, len(skeletons))
+
+	for i, skeleton := range skeletons {
+		emptyPoll, pollErr := converterFunction(skeleton)
+		if pollErr != nil {
+			return nil, pollErr
+		}
+		res[i] = emptyPoll
+	}
+
+	return res, nil
 }

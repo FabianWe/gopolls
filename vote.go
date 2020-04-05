@@ -16,6 +16,7 @@ package gopolls
 
 import (
 	"encoding/csv"
+	"fmt"
 	"io"
 )
 
@@ -107,7 +108,7 @@ func (r *VotesCSVReader) readHead() ([]string, error) {
 	return res, nil
 }
 
-func (r *VotesCSVReader) ReadRecord() (head []string, lines [][]string, err error) {
+func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err error) {
 	head, err = r.readHead()
 	if err != nil {
 		return
@@ -120,4 +121,118 @@ func (r *VotesCSVReader) ReadRecord() (head []string, lines [][]string, err erro
 		lines = nil
 	}
 	return
+}
+
+type VotersMatrix struct {
+	Voters      []*Voter
+	Polls       *PollSkeletonCollection
+	MatrixHead  []string
+	Matrix      [][]string
+	VotersMap   map[string]*Voter
+	SkeletonMap map[string]AbstractPollSkeleton
+}
+
+func NewVotersMatrixFromCSV(r io.Reader, voters []*Voter, polls *PollSkeletonCollection) (*VotersMatrix, error) {
+	votersMap, votersMapErr := VotersToMap(voters)
+	if votersMapErr != nil {
+		return nil, votersMapErr
+	}
+	pollsMap, pollsMapErr := polls.SkeletonsToMap()
+	if pollsMapErr != nil {
+		return nil, pollsMapErr
+	}
+	csvReader := NewVotesCSVReader(r)
+	// read head and body of matrix
+	head, matrix, csvErr := csvReader.ReadRecords()
+	if csvErr != nil {
+		return nil, csvErr
+	}
+	res := &VotersMatrix{
+		Voters:      voters,
+		Polls:       polls,
+		MatrixHead:  head,
+		Matrix:      matrix,
+		VotersMap:   votersMap,
+		SkeletonMap: pollsMap,
+	}
+	return res, nil
+}
+
+func (m *VotersMatrix) PrepareAndVerifyVotesMatrix() ([]*Voter, []AbstractPollSkeleton, error) {
+	if len(m.MatrixHead) == 0 {
+		return nil,
+			nil,
+			NewPollingSyntaxError(nil, "votes matrix must contain at least one column (voter name)")
+	}
+	// some simple checks to avoid doing complicated stuff if we can already find discrepancies here
+	if len(m.VotersMap) != len(m.Matrix) {
+		return nil,
+			nil,
+			NewPollingSyntaxError(nil, "length of votersMap matrix does not match number of given votersMap")
+	}
+	if len(m.SkeletonMap) != len(m.MatrixHead)-1 {
+		return nil,
+			nil,
+			NewPollingSyntaxError(nil, "length of polls matrix does not match number of given polls")
+	}
+	//now read the votersMap from the matrix and ensure that each voter in the matrix (first column)
+	// is also in the original mapping
+	// create a list of votersMap on the fly
+	newVoters := make([]*Voter, 0, len(m.VotersMap))
+	newVotersSet := make(map[string]struct{}, len(m.VotersMap))
+	for _, row := range m.Matrix {
+		if len(row) != len(m.MatrixHead) {
+			return nil,
+				nil,
+				NewPollingSyntaxError(nil, "number of columns in votersMap matrix must always be %d, got row of length %d instead",
+					len(m.MatrixHead), len(row))
+		}
+		voterName := row[0]
+		if _, alreadyFound := newVotersSet[voterName]; alreadyFound {
+			return nil,
+				nil,
+				NewDuplicateError(fmt.Sprintf("voter \"%s\" was found multiple times in the votersMap matrix", voterName))
+		}
+		voter, has := m.VotersMap[voterName]
+		if !has {
+			return nil,
+				nil,
+				NewPollingSyntaxError(nil, "voter \"%s\" from votersMap matrix not found in original list", voterName)
+		}
+		newVoters = append(newVoters, voter)
+		newVotersSet[voterName] = struct{}{}
+	}
+	// now all votersMap exist and we created a list of them
+	// also we took care that this list doesn't contain duplicates
+	// if the lengths of the two voter sets are equal they must be identical
+	if len(m.VotersMap) != len(newVotersSet) {
+		return nil,
+			nil,
+			NewPollingSyntaxError(nil, "not all votersMap from source were found in the votersMap matrix")
+	}
+	// now do the same for all skeletons
+	newSkeletons := make([]AbstractPollSkeleton, 0, len(m.SkeletonMap))
+	newSkeletonsSet := make(map[string]struct{}, len(m.SkeletonMap))
+	for _, pollName := range m.MatrixHead[1:] {
+		if _, alreadyFound := newVotersSet[pollName]; alreadyFound {
+			return nil,
+				nil,
+				NewDuplicateError(fmt.Sprintf("poll \"%s\" was found multiple times in the votersMap matrix", pollName))
+		}
+		skel, has := m.SkeletonMap[pollName]
+		if !has {
+			return nil,
+				nil,
+				NewPollingSyntaxError(nil, "poll \"%s\" from votersMap matrix not found in original list", pollName)
+		}
+		newSkeletons = append(newSkeletons, skel)
+		newSkeletonsSet[pollName] = struct{}{}
+	}
+	// now again, all polls exist and we created a list of them, test the lengths as before
+	if len(m.SkeletonMap) != len(newSkeletonsSet) {
+		return nil,
+			nil,
+			NewPollingSyntaxError(nil, "not all polls from source were found in the votersMap matrix")
+	}
+	return newVoters, newSkeletons, nil
 }
