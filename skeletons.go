@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	MoneyPollSkeletonType   = "money"
-	GeneralPollSkeletonType = "basic"
+	MoneyPollSkeletonType   = "money-skeleton"
+	GeneralPollSkeletonType = "basic-skeleton"
 )
 
 type AbstractPollSkeleton interface {

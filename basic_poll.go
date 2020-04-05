@@ -165,6 +165,10 @@ func NewBasicPoll(votes []*BasicVote) *BasicPoll {
 	return &BasicPoll{votes}
 }
 
+func (poll *BasicPoll) PollType() string {
+	return BasicPollType
+}
+
 func (poll *BasicPoll) TruncateVoters() []*BasicVote {
 	// culprits: all with an invalid choice
 	// filtered: the filtered list to use as new votes

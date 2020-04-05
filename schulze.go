@@ -132,6 +132,10 @@ func NewSchulzePoll(numOptions int, votes []*SchulzeVote) *SchulzePoll {
 	}
 }
 
+func (poll *SchulzePoll) PollType() string {
+	return SchulzePollType
+}
+
 func (poll *SchulzePoll) TruncateVoters() []*SchulzeVote {
 	// culprits: all with an invalid number of elements in ranking
 	// filtered: the filtered list to use as new votes

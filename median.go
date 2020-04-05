@@ -117,6 +117,10 @@ func NewMedianPoll(value MedianUnit, votes []*MedianVote) *MedianPoll {
 	}
 }
 
+func (poll *MedianPoll) PollType() string {
+	return MedianPollType
+}
+
 // TruncateVoters identifies all votes that contain a value > poll.Value.
 //
 // It could lead to "weird" results if the value the voters agreed upon was > poll.Value.
