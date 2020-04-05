@@ -60,6 +60,14 @@ func NewSchulzeVote(voter *Voter, ranking SchulzeRanking) *SchulzeVote {
 	}
 }
 
+func (vote *SchulzeVote) GetVoter() *Voter {
+	return vote.Voter
+}
+
+func (vote *SchulzeVote) VoteType() string {
+	return SchulzeVoteType
+}
+
 type SchulzeWinsList [][]int
 
 type SchulzePoll struct {

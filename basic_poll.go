@@ -58,6 +58,14 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 	}
 }
 
+func (vote *BasicVote) GetVoter() *Voter {
+	return vote.Voter
+}
+
+func (vote *BasicVote) VoteType() string {
+	return BasicVoteType
+}
+
 type BasicPoll struct {
 	Votes []*BasicVote
 }

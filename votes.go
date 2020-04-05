@@ -16,7 +16,19 @@ package gopolls
 
 import (
 	"encoding/csv"
+	"errors"
 	"io"
+)
+
+type AbstractVote interface {
+	GetVoter() *Voter
+	VoteType() string
+}
+
+const (
+	BasicVoteType   = "basic-vote"
+	MedianVoteType  = "median-vote"
+	SchulzeVoteType = "schulze-vote"
 )
 
 // CSV //
@@ -26,19 +38,21 @@ type VotesCSVWriter struct {
 }
 
 func NewVotesCSVWriter(w io.Writer) *VotesCSVWriter {
-	return &VotesCSVWriter{csv: csv.NewWriter(w)}
+	writer := csv.NewWriter(w)
+	writer.Comma = ';'
+	return &VotesCSVWriter{csv: writer}
 }
 
-func (writer *VotesCSVWriter) writeCSVHead(skels []AbstractPollSkeleton) error {
+func (w *VotesCSVWriter) writeCSVHead(skels []AbstractPollSkeleton) error {
 	row := make([]string, len(skels)+1)
 	row[0] = "voter"
 	for i, skel := range skels {
 		row[i+1] = skel.GetName()
 	}
-	return writer.csv.Write(row)
+	return w.csv.Write(row)
 }
 
-func (writer *VotesCSVWriter) writeEmptyRecords(voters []*Voter, skels []AbstractPollSkeleton) error {
+func (w *VotesCSVWriter) writeEmptyRecords(voters []*Voter, skels []AbstractPollSkeleton) error {
 	// row will be re-used
 	row := make([]string, len(skels)+1)
 	for _, voter := range voters {
@@ -46,20 +60,61 @@ func (writer *VotesCSVWriter) writeEmptyRecords(voters []*Voter, skels []Abstrac
 		for j, skel := range skels {
 			row[j+1] = skel.GetName()
 		}
-		if err := writer.csv.Write(row); err != nil {
+		if err := w.csv.Write(row); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (writer *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []AbstractPollSkeleton) error {
-	if err := writer.writeCSVHead(skels); err != nil {
+func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []AbstractPollSkeleton) error {
+	if err := w.writeCSVHead(skels); err != nil {
 		return err
 	}
-	if err := writer.writeEmptyRecords(voters, skels); err != nil {
+	if err := w.writeEmptyRecords(voters, skels); err != nil {
 		return err
 	}
-	writer.csv.Flush()
-	return writer.csv.Error()
+	w.csv.Flush()
+	return w.csv.Error()
+}
+
+type VotesCSVReader struct {
+	csv *csv.Reader
+}
+
+func NewVotesCSVReader(r io.Reader) *VotesCSVReader {
+	reader := csv.NewReader(r)
+	reader.Comma = ';'
+	return &VotesCSVReader{
+		csv: reader,
+	}
+}
+
+func (r *VotesCSVReader) readHead() ([]string, error) {
+	res, err := r.csv.Read()
+	if err == io.EOF {
+		return nil, errors.New("no header found in csv file")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(res) == 0 {
+		return nil, errors.New("expected at least the voter column in csv file")
+	}
+	return res, nil
+}
+
+func (r *VotesCSVReader) ReadRecord() (head []string, lines [][]string, err error) {
+	head, err = r.readHead()
+	if err != nil {
+		return
+	}
+	// note that the first call in read head already makes sure that each line has the exact
+	// same length and that the length is > 0
+	lines, err = r.csv.ReadAll()
+	if err != nil {
+		head = nil
+		lines = nil
+	}
+	return
 }

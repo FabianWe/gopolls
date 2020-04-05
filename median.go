@@ -41,6 +41,14 @@ func NewMedianVote(voter *Voter, value MedianUnit) *MedianVote {
 	}
 }
 
+func (vote *MedianVote) GetVoter() *Voter {
+	return vote.Voter
+}
+
+func (vote *MedianVote) VoteType() string {
+	return MedianVoteType
+}
+
 // MedianPoll is a poll that can be evaluated with the median method.
 //
 // The median method for polls works as follows:
