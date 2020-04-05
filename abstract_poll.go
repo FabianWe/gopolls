@@ -14,6 +14,11 @@
 
 package gopolls
 
+import (
+	"fmt"
+	"reflect"
+)
+
 type AbstractPoll interface {
 	PollType() string
 }
@@ -24,4 +29,52 @@ const (
 	BasicPollType   = "basic-poll"
 )
 
-type SkeletonConverter func(skel AbstractPollSkeleton) (AbstractPoll, bool)
+type SkelTypeConversionError string
+
+func NewSkelTypeConversionError(msg string, a ...interface{}) SkelTypeConversionError {
+	return SkelTypeConversionError(fmt.Sprintf(msg, a...))
+}
+
+func (err SkelTypeConversionError) Error() string {
+	return string(err)
+}
+
+type SkeletonConverter func(skel AbstractPollSkeleton) (AbstractPoll, error)
+
+func NewDefaultSkeletonConverter(convertToBasic bool) SkeletonConverter {
+	return func(skel AbstractPollSkeleton) (AbstractPoll, error) {
+		return detaultSkeletonConverterGenerator(convertToBasic, skel)
+	}
+}
+
+func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSkeleton) (AbstractPoll, error) {
+	defaultVotesSize := 50
+	switch typedSkel := skel.(type) {
+	case *MoneyPollSkeleton:
+		value := typedSkel.Value
+		if value.ValueCents < 0 {
+			return nil,
+				NewSkelTypeConversionError("value for median poll is not allowed to be < 0! got %d for poll %s",
+					value.ValueCents, typedSkel.Name)
+		}
+		return NewMedianPoll(MedianUnit(value.ValueCents), make([]*MedianVote, 0, defaultVotesSize)), nil
+
+	case *PollSkeleton:
+		numOptions := len(typedSkel.Options)
+		switch numOptions {
+		case 0, 1:
+			return nil,
+				NewSkelTypeConversionError("Got only %d options, but at least two options are required", numOptions)
+		case 2:
+			if convertToBasic {
+				return NewBasicPoll(make([]*BasicVote, 0, defaultVotesSize)), nil
+			}
+			fallthrough
+		default:
+			return NewSchulzePoll(numOptions, make([]*SchulzeVote, 0, defaultVotesSize)), nil
+		}
+	default:
+		return nil, NewSkelTypeConversionError("Only money polls (median) and basic polls (e.g. normal poll, scholze are supported). Got type %s",
+			reflect.TypeOf(skel))
+	}
+}
