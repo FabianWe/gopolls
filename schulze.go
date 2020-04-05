@@ -17,6 +17,8 @@ package gopolls
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 type SchulzeMatrix [][]Weight
@@ -48,6 +50,31 @@ func (m SchulzeMatrix) Equals(other SchulzeMatrix) bool {
 
 type SchulzeRanking []int
 
+func NewSchulzeRanking() SchulzeRanking {
+	return make(SchulzeRanking, 0)
+}
+
+// private because from outside the parser implementing the parser interface should be used
+func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
+	split := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == '/'
+	})
+	if length >= 0 && len(split) != length {
+		return nil, NewPollingSyntaxError(nil, "schulze ranking of length %d was expected, got length %d",
+			length, len(split))
+	}
+	res := make(SchulzeRanking, len(split))
+	for i, asString := range split {
+		asString = strings.TrimSpace(asString)
+		asInt, intErr := strconv.Atoi(asString)
+		if intErr != nil {
+			return nil, NewPollingSyntaxError(intErr, "can't parse schulze ranking")
+		}
+		res[i] = asInt
+	}
+	return res, nil
+}
+
 type SchulzeVote struct {
 	Voter   *Voter
 	Ranking SchulzeRanking
@@ -58,6 +85,26 @@ func NewSchulzeVote(voter *Voter, ranking SchulzeRanking) *SchulzeVote {
 		Voter:   voter,
 		Ranking: ranking,
 	}
+}
+
+type SchulzeVoteParser struct {
+	Length int
+}
+
+func NewSchuleVoteParser(length int) SchulzeVoteParser {
+	return SchulzeVoteParser{Length: length}
+}
+
+func (parser SchulzeVoteParser) WithLength(length int) SchulzeVoteParser {
+	return SchulzeVoteParser{Length: length}
+}
+
+func (parser SchulzeVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+	ranking, err := parserSchulzeRanking(s, parser.Length)
+	if err != nil {
+		return nil, err
+	}
+	return NewSchulzeVote(voter, ranking), nil
 }
 
 func (vote *SchulzeVote) GetVoter() *Voter {

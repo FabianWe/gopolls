@@ -16,13 +16,16 @@ package gopolls
 
 import (
 	"encoding/csv"
-	"errors"
 	"io"
 )
 
 type AbstractVote interface {
 	GetVoter() *Voter
 	VoteType() string
+}
+
+type VoteParser interface {
+	ParseFromString(s string, voter *Voter) (AbstractVote, error)
 }
 
 const (
@@ -93,13 +96,13 @@ func NewVotesCSVReader(r io.Reader) *VotesCSVReader {
 func (r *VotesCSVReader) readHead() ([]string, error) {
 	res, err := r.csv.Read()
 	if err == io.EOF {
-		return nil, errors.New("no header found in csv file")
+		return nil, NewPollingSyntaxError(nil, "no header found in csv file")
 	}
 	if err != nil {
 		return nil, err
 	}
 	if len(res) == 0 {
-		return nil, errors.New("expected at least the voter column in csv file")
+		return nil, NewPollingSyntaxError(nil, "expected at least the voter column in csv file")
 	}
 	return res, nil
 }

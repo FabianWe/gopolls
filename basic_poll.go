@@ -14,7 +14,10 @@
 
 package gopolls
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type BasicPollAnswer int8
 
@@ -56,6 +59,57 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 		Voter:  voter,
 		Choice: choice,
 	}
+}
+
+type BasicVoteParser struct {
+	NoValues         []string
+	AyeValues        []string
+	AbstentionValues []string
+}
+
+func NewBasicVoteParser() *BasicVoteParser {
+	noDefaults := []string{"+", "n", "no", "nein", "dagegen"}
+	ayeDefaults := []string{"-", "a", "aye", "y", "yes", "ja", "dafür"}
+	abstentionDefaults := []string{"/", "abstention", "enthaltung"}
+	return &BasicVoteParser{
+		NoValues:         noDefaults,
+		AyeValues:        ayeDefaults,
+		AbstentionValues: abstentionDefaults,
+	}
+}
+
+func (parser *BasicVoteParser) containsString(candidates []string, s string) bool {
+	s = strings.ToLower(s)
+	for _, candidate := range candidates {
+		if candidate == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+	var answer BasicPollAnswer = -1
+	switch {
+	case parser.containsString(parser.NoValues, s):
+		answer = No
+	case parser.containsString(parser.AyeValues, s):
+		answer = Aye
+	case parser.containsString(parser.AbstentionValues, s):
+		answer = Abstention
+	}
+	var err error
+	var vote *BasicVote
+	if answer < 0 {
+		allowedNoString := strings.Join(parser.NoValues, ", ")
+		allowedAyeString := strings.Join(parser.AyeValues, ", ")
+		allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
+		err = fmt.Errorf("invalid option for basic vote (\"%s\"), allowed are: no\"%s\", aye: \"%s\", abstention: \"%s\"",
+			s, allowedNoString, allowedAyeString, allowedAbstentionString)
+	} else {
+		vote = NewBasicVote(voter, answer)
+	}
+	return vote, err
 }
 
 func (vote *BasicVote) GetVoter() *Voter {

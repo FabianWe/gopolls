@@ -351,6 +351,11 @@ func handleOptionState(line string, context *parserContext) (parserState, error)
 		if currencyErr != nil {
 			return invalidState, NewPollingSyntaxError(currencyErr, "Can't parse money value")
 		}
+		// only positive values are allowed
+		// strictly speaking not a syntax error but fine
+		if currency.ValueCents < 0 {
+			return invalidState, NewPollingSyntaxError(nil, "string %s describes a negative value, can't be used in a median poll", line)
+		}
 		// add a new skeleton
 		skeleton := NewMoneyPollSkeleton(context.lastPollName, currency)
 		group.Skeletons = append(group.Skeletons, skeleton)

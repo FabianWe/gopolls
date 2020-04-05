@@ -41,6 +41,44 @@ func NewMedianVote(voter *Voter, value MedianUnit) *MedianVote {
 	}
 }
 
+type MedianVoteParser struct {
+	parser   CurrencyParser
+	maxValue MedianUnit
+}
+
+func NewMedianVoteParser(currencyParser CurrencyParser) MedianVoteParser {
+	return MedianVoteParser{
+		parser:   currencyParser,
+		maxValue: NoMedianUnitValue,
+	}
+}
+
+func (parser MedianVoteParser) WithMaxValue(maxValue MedianUnit) MedianVoteParser {
+	return MedianVoteParser{
+		parser:   parser.parser,
+		maxValue: maxValue,
+	}
+}
+
+func (parser MedianVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+	// try to parse s with the given parser, that's all we need to do
+	currency, parseErr := parser.parser.Parse(s)
+	if parseErr != nil {
+		return nil, NewPollingSyntaxError(parseErr, "error parsing currency")
+	}
+	// transform into median vote
+	if currency.ValueCents < 0 {
+		return nil, NewPollingSyntaxError(nil, "string %s describes a negative value, can't be used in a median vote", s)
+	}
+	asMedianUnit := MedianUnit(currency.ValueCents)
+	// check if it is in the correct bounds
+	if parser.maxValue != NoMedianUnitValue && asMedianUnit > parser.maxValue {
+		return nil, NewPollingSyntaxError(nil, "value for median vote (%d) is greatre than allowed max value (%d)",
+			asMedianUnit, parser.maxValue)
+	}
+	return NewMedianVote(voter, asMedianUnit), nil
+}
+
 func (vote *MedianVote) GetVoter() *Voter {
 	return vote.Voter
 }
