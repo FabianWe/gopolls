@@ -62,9 +62,10 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 }
 
 type BasicVoteParser struct {
-	NoValues         []string
-	AyeValues        []string
-	AbstentionValues []string
+	NoValues          []string
+	AyeValues         []string
+	AbstentionValues  []string
+	AllowRankingStyle bool
 }
 
 func NewBasicVoteParser() *BasicVoteParser {
@@ -72,9 +73,10 @@ func NewBasicVoteParser() *BasicVoteParser {
 	ayeDefaults := []string{"-", "a", "aye", "y", "yes", "ja", "dafür"}
 	abstentionDefaults := []string{"/", "abstention", "enthaltung"}
 	return &BasicVoteParser{
-		NoValues:         noDefaults,
-		AyeValues:        ayeDefaults,
-		AbstentionValues: abstentionDefaults,
+		NoValues:          noDefaults,
+		AyeValues:         ayeDefaults,
+		AbstentionValues:  abstentionDefaults,
+		AllowRankingStyle: true,
 	}
 }
 
@@ -88,7 +90,7 @@ func (parser *BasicVoteParser) containsString(candidates []string, s string) boo
 	return false
 }
 
-func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+func (parser *BasicVoteParser) basicStyle(s string, voter *Voter) (*BasicVote, bool) {
 	var answer BasicPollAnswer = -1
 	switch {
 	case parser.containsString(parser.NoValues, s):
@@ -98,18 +100,53 @@ func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (Abstract
 	case parser.containsString(parser.AbstentionValues, s):
 		answer = Abstention
 	}
-	var err error
-	var vote *BasicVote
 	if answer < 0 {
-		allowedNoString := strings.Join(parser.NoValues, ", ")
-		allowedAyeString := strings.Join(parser.AyeValues, ", ")
-		allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
-		err = fmt.Errorf("invalid option for basic vote (\"%s\"), allowed are: no\"%s\", aye: \"%s\", abstention: \"%s\"",
-			s, allowedNoString, allowedAyeString, allowedAbstentionString)
+		return nil, false
 	} else {
-		vote = NewBasicVote(voter, answer)
+		return NewBasicVote(voter, answer), true
 	}
-	return vote, err
+}
+
+func (parser *BasicVoteParser) rankingStyle(s string, voter *Voter) (*BasicVote, bool) {
+	ranking, rankingErr := parserSchulzeRanking(s, 2)
+	if rankingErr != nil {
+		return nil, false
+	}
+	// now we have a valid ranking, find out what it means
+	ayeNum, noNum := ranking[0], ranking[1]
+	var answer = Abstention
+	switch {
+	case ayeNum < noNum:
+		answer = Aye
+	case ayeNum > noNum:
+		answer = No
+	}
+	return NewBasicVote(voter, answer), true
+}
+
+func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+	// first try the "default" style with no, yes etc.
+	var vote *BasicVote
+	var ok bool
+
+	vote, ok = parser.basicStyle(s, voter)
+	if ok {
+		return vote, nil
+	}
+
+	// try ranking style
+	vote, ok = parser.rankingStyle(s, voter)
+	if ok {
+		return vote, nil
+	}
+
+	// no style matched ==> error
+	allowedNoString := strings.Join(parser.NoValues, ", ")
+	allowedAyeString := strings.Join(parser.AyeValues, ", ")
+	allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
+	err := NewPollingSyntaxError(nil, "invalid option for basic vote (\"%s\"), allowed are: no\"%s\", aye: \"%s\", abstention: \"%s\" or ranking style",
+		s, allowedNoString, allowedAyeString, allowedAbstentionString)
+	return nil, err
 }
 
 func (vote *BasicVote) GetVoter() *Voter {
