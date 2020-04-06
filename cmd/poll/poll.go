@@ -19,13 +19,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/FabianWe/gopolls"
-	"github.com/markbates/pkger"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"time"
 )
@@ -33,6 +32,11 @@ import (
 const version = "0.0.1"
 
 var currencyHandler = gopolls.SimpleEuroHandler{}
+
+// used to store the "root" path for static files and templates, avoid passing it around as argument
+// should be fine enough in this main file
+var templateRoot string
+var staticRoot string
 
 type mainContext struct {
 	Voters         []*gopolls.Voter
@@ -130,36 +134,15 @@ func baseTemplates() *template.Template {
 			return currencyHandler.Format(val)
 		},
 	}
-	tFile, fileErr := pkger.Open("/cmd/poll/templates/base.gohtml")
-	if fileErr != nil {
-		panic(fileErr)
-	}
-	content, readErr := ioutil.ReadAll(tFile)
-	if readErr != nil {
-		panic(readErr)
-	}
-	return template.Must(template.New("base.gohtml").Parse(string(content))).Funcs(funcMap)
 
-	// TODO there seems to be a bug in pkger with Dir, doesn't work this way, that's why we have the rather
-	// "ugly" version above
-	//return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates"), nil,"base.gohtml"))
+	basePath := filepath.Join(templateRoot, "base.gohtml")
+	base := template.Must(template.ParseFiles(basePath))
+	return base.Funcs(funcMap)
 }
 
 func readTemplate(base *template.Template, name string) *template.Template {
-	tFile, fileErr := pkger.Open("/cmd/poll/templates/" + name)
-	if fileErr != nil {
-		panic(fileErr)
-	}
-	content, readErr := ioutil.ReadAll(tFile)
-	if readErr != nil {
-		panic(readErr)
-	}
-	base = template.Must(base.Clone())
-	template.Must(base.New(name).Parse(string(content)))
-	return base
-
-	// same as before, sadly there seems to be a bug in pkger
-	// return template.Must(vfstemplate.ParseFiles(pkger.Dir("/cmd/poll/templates/"), template.Must(base.Clone()), names...))
+	templatePath := filepath.Join(templateRoot, name)
+	return template.Must(template.Must(base.Clone()).ParseFiles(templatePath))
 }
 
 func executeTemplate(t *template.Template, context *renderContext, buff *bytes.Buffer) handlerRes {
@@ -413,8 +396,9 @@ func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffe
 }
 
 func main() {
-	pkger.Include("/cmd/poll/templates")
-	pkger.Include("/cmd/poll/static")
+	//pkger.Include("/cmd/poll/templates")
+	//pkger.Include("/cmd/poll/static")
+	parseArgs()
 
 	base := baseTemplates()
 
@@ -425,7 +409,7 @@ func main() {
 	pollsH := newPollsHandler(base)
 	csvH := newExportCSVTemplateHandler()
 	evaluateH := newEvaluationHandler(base)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(pkger.Dir("/cmd/poll/static"))))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(staticRoot))))
 	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
 	http.HandleFunc("/polls/", toHandleFunc(pollsH, &context))
 	http.HandleFunc("/votes/csv/", toHandleFunc(csvH, &context))
@@ -436,15 +420,47 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
-func runMain() error {
-	fmt.Printf("gopolls version %s started\n", version)
+func doesDirExist(path string) bool {
+	stat, err := os.Stat(path)
 
-	flags := flag.NewFlagSet("gopolls", flag.ExitOnError)
-	var votersFilePath string
-	flags.StringVar(&votersFilePath, "Voters", "", "Filepath to the Voters file")
-	var pollsFilePath string
-	flags.StringVar(&pollsFilePath, "polls", "", "Path to the polls file")
-	flags.Parse(os.Args[1:])
+	if err != nil {
+		if os.IsExist(err) {
+			return false
+		}
+		log.Fatalf("error accessing assets directory %s: %v", path, err)
+	}
+	if !stat.IsDir() {
+		log.Fatalf("%s is a file, not a directory", path)
+	}
+	return true
+}
 
-	return nil
+func parseArgs() {
+	var rootString string
+	flag.StringVar(&rootString, "assets", "", "Directory in which the assets (templates and static) are, defaults to dir of executable")
+	flag.Parse()
+	if rootString == "" {
+		// try to get executable directory
+		execPath, err := os.Executable()
+		if err == nil {
+			rootString = filepath.Dir(execPath)
+		} else {
+			rootString = "./"
+			log.Println("Can't determine executable directory, assuming assets are in ./")
+		}
+	}
+	// check if directories exist
+	templateDir := filepath.Join(rootString, "templates")
+	staticDir := filepath.Join(rootString, "static")
+
+	if !doesDirExist(templateDir) {
+		log.Fatalf("template directory does not exist, assumed it to be at %s", templateDir)
+	}
+
+	if !doesDirExist(staticDir) {
+		log.Fatalf("static directory does not exist, assumed it to be at %s", templateDir)
+	}
+
+	templateRoot = templateDir
+	staticRoot = staticDir
 }
