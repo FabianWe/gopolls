@@ -19,6 +19,11 @@ import (
 	"reflect"
 )
 
+// AbstractPoll describes any poll.
+// It has only one method PollType which returns the type as a string.
+// Must operations dealing with polls do type assertions / switches are operate depending on the string of PolLType().
+//
+// Constants are defined for implemented poll types: MedianPollType, SchulzePollType and BasicPollType.
 type AbstractPoll interface {
 	PollType() string
 }
@@ -29,8 +34,12 @@ const (
 	BasicPollType   = "basic-poll"
 )
 
+// SkelTypeConversionError is an error returned if a skeleton can't be converted to a poll (because for example it hash
+// and unkown type).
 type SkelTypeConversionError string
 
+// NewSkelTypeConversionError returns a new SkelTypeConversionError given a format string and the values for the
+// placeholders.
 func NewSkelTypeConversionError(msg string, a ...interface{}) SkelTypeConversionError {
 	return SkelTypeConversionError(fmt.Sprintf(msg, a...))
 }
@@ -39,24 +48,47 @@ func (err SkelTypeConversionError) Error() string {
 	return string(err)
 }
 
+// SkeletonConverter is a function that takes a skeleton and returns an empty poll for this skeleton.
+// If an unknown type is encountered or the skeleton is in some way invalid it should return nil an error of type
+// SkelTypeConversionError.
+//
+// An implementation is given in DefaultSkeletonConverter and a generator in NewDefaultSkeletonConverter.
 type SkeletonConverter func(skel AbstractPollSkeleton) (AbstractPoll, error)
 
+// NewDefaultSkeletonConverter is a generator function that returns a new SkeletonConverter.
+// It does the following translations:
+// A MoneyPollSkel gets translated to a MedianPol, it checks if the value described is >= (< 0 is not allowed).
+// A PollSkeleton is translated to a BasicPoll or SchulzePoll.
+// A BasicPoll is returned if the PollSkeleton has exactly two options,otherwise a SchulzePoll is created.
+// If the number of options in the PollSkeleton is < 2 an error is returned.
+//
+// If convertToBasic is false a SchulzePoll will be returned even for two options.
+//
+// Note: A poll with two options is independent of the actual content of the two options, it is assumed that the first
+// option represents Aye/Yes in some way and the second one No.
 func NewDefaultSkeletonConverter(convertToBasic bool) SkeletonConverter {
 	return func(skel AbstractPollSkeleton) (AbstractPoll, error) {
 		return detaultSkeletonConverterGenerator(convertToBasic, skel)
 	}
 }
 
+// DefaultSkeletonConverter is the default implementation of SkeletonConverter.
+// It does the following translations:
+// A MoneyPollSkel gets translated to a MedianPol, it checks if the value described is >= (< 0 is not allowed).
+// A PollSkeleton is translated to a BasicPoll or SchulzePoll.
+// A BasicPoll is returned if the PollSkeleton has exactly two options,otherwise a SchulzePoll is created.
+// If the number of options in the PollSkeleton is < 2 an error is returned.
+//
+// It is just NewDefaultSkeletonConverter(true).
 var DefaultSkeletonConverter = NewDefaultSkeletonConverter(true)
 
 func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSkeleton) (AbstractPoll, error) {
-	defaultVotesSize := 50
 	switch typedSkel := skel.(type) {
 	case *MoneyPollSkeleton:
 		value := typedSkel.Value
 		if value.ValueCents < 0 {
 			return nil,
-				NewSkelTypeConversionError("value for median poll is not allowed to be < 0! got %d for poll %s",
+				NewSkelTypeConversionError("value for median poll (\"%s\") is not allowed to be < 0! got %d for poll \"%s\"",
 					value.ValueCents, typedSkel.Name)
 		}
 		return NewMedianPoll(MedianUnit(value.ValueCents), make([]*MedianVote, 0, defaultVotesSize)), nil
@@ -66,7 +98,8 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 		switch numOptions {
 		case 0, 1:
 			return nil,
-				NewSkelTypeConversionError("Got only %d options, but at least two options are required", numOptions)
+				NewSkelTypeConversionError("got only %d options, but at least two options are required. poll is \"%s\"",
+					numOptions, typedSkel.Name)
 		case 2:
 			if convertToBasic {
 				return NewBasicPoll(make([]*BasicVote, 0, defaultVotesSize)), nil
@@ -76,11 +109,15 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 			return NewSchulzePoll(numOptions, make([]*SchulzeVote, 0, defaultVotesSize)), nil
 		}
 	default:
-		return nil, NewSkelTypeConversionError("Only money polls (median) and basic polls (e.g. normal poll, scholze are supported). Got type %s",
+		return nil, NewSkelTypeConversionError("only money polls (median) and basic polls (e.g. normal poll, schulze are supported). Got type %s",
 			reflect.TypeOf(skel))
 	}
 }
 
+// ConvertSkeletonsToPolls does the translation from a list of skeletons to a list of (empty) polls.
+// It uses a SkeletonConverter function to do the actual conversion and returns an error if any of the skeletons
+// in the list is not valid.
+// If converterFunction is nil DefaultSkeletonConverter is used.
 func ConvertSkeletonsToPolls(skeletons []AbstractPollSkeleton, converterFunction SkeletonConverter) ([]AbstractPoll, error) {
 	if converterFunction == nil {
 		converterFunction = DefaultSkeletonConverter

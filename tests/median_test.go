@@ -109,6 +109,22 @@ func TestMedianTwo(t *testing.T) {
 	assertDetails(t, 149, []*gopolls.Voter{voterTwo, voterThree}, res.GetVotersForValue(149))
 }
 
+func TestMedianNoMajority(t *testing.T) {
+	voterOne := gopolls.NewVoter("one", 21)
+	voterTwo := gopolls.NewVoter("two", 42)
+
+	voteOne := gopolls.NewMedianVote(voterOne, 0)
+	voteTwo := gopolls.NewMedianVote(voterTwo, 0)
+
+	poll := gopolls.NewMedianPoll(42000, []*gopolls.MedianVote{voteOne, voteTwo})
+
+	res := poll.Tally(gopolls.NoWeight)
+
+	if res.MajorityValue != 0 {
+		t.Errorf("Expected majority value to be 0, got %d instead", res.MajorityValue)
+	}
+}
+
 func TestMedianTruncateVoters(t *testing.T) {
 	voterOne := gopolls.NewVoter("one", 1)
 	voterTwo := gopolls.NewVoter("two", 2)

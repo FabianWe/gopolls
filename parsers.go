@@ -23,6 +23,8 @@ import (
 	"strings"
 )
 
+///// ERRORS /////
+
 // PollingSyntaxError is an error returned if a syntax error is encountered.
 //
 // It can wrap another error (set to nil if not required) and has an optional line number, if this number is < 0
@@ -71,7 +73,7 @@ func convertParserErr(err error, lineNum int) error {
 func (err PollingSyntaxError) Error() string {
 	errMessage := ""
 	if err.LineNum < 0 {
-		errMessage = "syntax error: "
+		errMessage = ""
 	} else {
 		errMessage = fmt.Sprintf("syntax error in line %d: ", err.LineNum)
 	}
@@ -86,6 +88,41 @@ func (err PollingSyntaxError) Error() string {
 func (err PollingSyntaxError) Unwrap() error {
 	return err.Err
 }
+
+// PollingSemanticError is an error returned if somewhere an option that is syntactically correct is
+// parsed but is not valid semantically.
+//
+// it can wrap another error (set to nil of not required).
+type PollingSemanticError struct {
+	Err error
+	Msg string
+}
+
+// NewPollingSemanticError returns a new PollingSemanticError.
+//
+// The message can be formatted with placeholders (like fmt.Sprintf).
+func NewPollingSemanticError(err error, msg string, a ...interface{}) PollingSemanticError {
+	return PollingSemanticError{
+		Err: err,
+		Msg: fmt.Sprintf(msg, a...),
+	}
+}
+
+func (err PollingSemanticError) Error() string {
+	errMessage := err.Msg
+
+	if err.Err != nil {
+		errMessage = errMessage + " Caused by: " + err.Err.Error()
+	}
+	return errMessage
+}
+
+// Unwrap returns the wrapped error.
+func (err PollingSemanticError) Unwrap() error {
+	return err.Err
+}
+
+///// PARSERS /////
 
 // isIgnoredLine tests if a line should be ignored during parsing, this happens if the line is empty or starts with #.
 func isIgnoredLine(line string) bool {
@@ -124,6 +161,9 @@ func ParseVotersLine(s string) (*Voter, error) {
 // "* <VOTER-NAME>: <WEIGHT>".
 //
 // Empty lines and lines starting with "#" are ignored.
+//
+// This method will return an internal error whenever the syntax / semantics are wrong, all errors from reader
+// are returned directly however.
 func ParseVoters(r io.Reader) ([]*Voter, error) {
 	scanner := bufio.NewScanner(r)
 	lineNum := 0
@@ -154,12 +194,17 @@ func ParseVotersFromString(s string) ([]*Voter, error) {
 }
 
 // parsing a description
+
+// the following regular expressions are used while parsing the input file
 var headLineRx = regexp.MustCompile(`^\s*#\s+(.+?)\s*$`)
 var groupLineRx = regexp.MustCompile(`^\s*##\s+(.+?)\s*$`)
 var pollLineRx = regexp.MustCompile(`^\s*###\s+(.+?)\s*$`)
 var optionLineRx = regexp.MustCompile(`^\s*[*]\s+(.+?)\s*$`)
 var medianOptionLineRx = regexp.MustCompile(`^\s*[-]\s+(.+?)\s*$`)
 
+// matchFirst tries to match s against each regex.
+// It returns the index of the first match and the complete match (from rx.FindStringSubmatch).
+// If no regex matches it returns -1 and nil.
 func matchFirst(s string, rxs ...*regexp.Regexp) (int, []string) {
 	for i, rx := range rxs {
 		match := rx.FindStringSubmatch(s)
@@ -170,6 +215,8 @@ func matchFirst(s string, rxs ...*regexp.Regexp) (int, []string) {
 	return -1, nil
 }
 
+// parserState is the state in which the parser is, it starts in headState and switches states depending on what
+// was parsed in the last run.
 type parserState int8
 
 const (
@@ -190,6 +237,7 @@ const (
 	invalidState
 )
 
+// parserContext stores information passed around while parsing an input.
 type parserContext struct {
 	*PollSkeletonCollection
 	lastPollName   string
@@ -204,8 +252,12 @@ func newParserContext(currencyParser CurrencyParser) *parserContext {
 	}
 }
 
+// stateHandleFunc is a function that is applied to a certain line and tests if the line meets the expectations.
+// If the line is of the wrong format it returns an error != nil.
 type stateHandleFunc func(line string, context *parserContext) (parserState, error)
 
+// runSecureStateHandleFunc wraps a call to f and recovers from any panic that might occur.
+// If a handler panics (which it shouldn't) this panic is fetched and returned as an error.
 func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserContext) (next parserState, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -216,6 +268,8 @@ func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserCon
 	return
 }
 
+// ParseCollectionSkeletons parses a collection of poll descriptions and returns them as skeletons.
+// See wiki and example files for format details.
 func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*PollSkeletonCollection, error) {
 	if currencyParser == nil {
 		currencyParser = SimpleEuroHandler{}
@@ -292,6 +346,7 @@ func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*Poll
 	return res, nil
 }
 
+// ParseCollectionSkeletonsFromString works as ParseCollectionSkeletons but parses the input from a string.
 func ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*PollSkeletonCollection, error) {
 	r := strings.NewReader(s)
 	return ParseCollectionSkeletons(r, currencyParser)
@@ -354,7 +409,7 @@ func handleOptionState(line string, context *parserContext) (parserState, error)
 		// only positive values are allowed
 		// strictly speaking not a syntax error but fine
 		if currency.ValueCents < 0 {
-			return invalidState, NewPollingSyntaxError(nil, "string %s describes a negative value, can't be used in a median poll", line)
+			return invalidState, NewPollingSemanticError(nil, "string %s describes a negative value, can't be used in a median poll", line)
 		}
 		// add a new skeleton
 		skeleton := NewMoneyPollSkeleton(context.lastPollName, currency)

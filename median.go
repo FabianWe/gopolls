@@ -17,17 +17,34 @@ package gopolls
 import (
 	"math"
 	"sort"
+	"strconv"
 )
 
-// MedianUnit is the unit used in median votes (the value the poll is about).
+// MedianUnit is the unit used in median polls and votes (the value the poll is about).
 type MedianUnit uint64
 
 // NoMedianUnitValue is used to signal that a value is not a valid MedianUnit, for example as default argument.
 const NoMedianUnitValue MedianUnit = math.MaxUint64
 
-// MedianVote represents a single vote in a median poll.
+// ParseMedianUnit parses a MedianUnit from a string.
+//
+// A PollingSyntaxError is returned if s is no valid uint or is NoMedianUnitValue.
+func ParseMedianUnit(s string) (MedianUnit, error) {
+	asInt, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return NoMedianUnitValue, NewPollingSyntaxError(err, "")
+	}
+	res := MedianUnit(asInt)
+	if res == NoMedianUnitValue {
+		return NoMedianUnitValue, NewPollingSyntaxError(nil, "integer value %d is too big", NoMedianUnitValue)
+	}
+	return res, nil
+}
+
+// MedianVote is a vote for a MedianPoll.
 //
 // The vote has a voter (weight taken into account) and the Value the voter voted for.
+// It implements the interface AbstractVote.
 type MedianVote struct {
 	Voter *Voter
 	Value MedianUnit
@@ -41,26 +58,41 @@ func NewMedianVote(voter *Voter, value MedianUnit) *MedianVote {
 	}
 }
 
+// MedianVoteParser implements VoteParser and returns an instance of MedianVote in its ParseFromString method.
+//
+// It allows a currency value to be parsed.
+// The currency value must be > 0, otherwise an error is returned.
+//
+// The currency is not directly parsed, instead it uses any CurrencyParser, this way the style of the string
+// can be adapted to your needs.
+//
+// It also allows to set a maxValue, that is every vote with a value > maxValue will return an error when parsed.
 type MedianVoteParser struct {
 	parser   CurrencyParser
 	maxValue MedianUnit
 }
 
-func NewMedianVoteParser(currencyParser CurrencyParser) MedianVoteParser {
-	return MedianVoteParser{
+// NewMedianVoteParser returns a new MedianVoteParser given the currency parser.
+//
+// The maxValue is set to NoMedianUnitValue, meaning that it is disabled and doesn't check for a max value.
+// To enable it use WithMaxValue.
+func NewMedianVoteParser(currencyParser CurrencyParser) *MedianVoteParser {
+	return &MedianVoteParser{
 		parser:   currencyParser,
 		maxValue: NoMedianUnitValue,
 	}
 }
 
-func (parser MedianVoteParser) WithMaxValue(maxValue MedianUnit) MedianVoteParser {
-	return MedianVoteParser{
+// WithMaxValue returns a shallow copy of the parser with only maxValue set to the new value.
+func (parser MedianVoteParser) WithMaxValue(maxValue MedianUnit) *MedianVoteParser {
+	return &MedianVoteParser{
 		parser:   parser.parser,
 		maxValue: maxValue,
 	}
 }
 
-func (parser MedianVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+// ParseFromString implements the VoteParser interface, for details see type description.
+func (parser *MedianVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
 	// try to parse s with the given parser, that's all we need to do
 	currency, parseErr := parser.parser.Parse(s)
 	if parseErr != nil {
@@ -68,39 +100,42 @@ func (parser MedianVoteParser) ParseFromString(s string, voter *Voter) (Abstract
 	}
 	// transform into median vote
 	if currency.ValueCents < 0 {
-		return nil, NewPollingSyntaxError(nil, "string %s describes a negative value, can't be used in a median vote", s)
+		return nil, NewPollingSemanticError(nil, "string %s describes a negative value, can't be used in a median vote", s)
 	}
 	asMedianUnit := MedianUnit(currency.ValueCents)
 	// check if it is in the correct bounds
 	if parser.maxValue != NoMedianUnitValue && asMedianUnit > parser.maxValue {
-		return nil, NewPollingSyntaxError(nil, "value for median vote (%d) is greatre than allowed max value (%d)",
+		return nil, NewPollingSemanticError(nil, "value for median vote (%d) is greatre than allowed max value (%d)",
 			asMedianUnit, parser.maxValue)
 	}
 	return NewMedianVote(voter, asMedianUnit), nil
 }
 
+// GetVoter returns the voter of the vote.
 func (vote *MedianVote) GetVoter() *Voter {
 	return vote.Voter
 }
 
+// VoteType returns the constant MedianVoteType.
 func (vote *MedianVote) VoteType() string {
 	return MedianVoteType
 }
 
-// MedianPoll is a poll that can be evaluated with the median method.
+// MedianPoll is a poll that can be evaluated with the median method. It implements the interface AbstractPoll.
 //
 // The median method for polls works as follows:
 // The value that "wins" the poll is the highest value that has a majority, taking into account the weight of the
-// voters. See tally for details.
+// voters. See Tally for details.
+//
 // Note: If a voter voted for a value > poll.Value this value could be chosen as the winner.
 // Because this doesn't make much sense you should take care to "truncate" the votes.
 // You can use TruncateVoters for this.
 //
 // It also has a Sorted attribute which is set to true once the votes are sorted according to value, s.t.
-// the highest votes come first.
-// See SortVotes for this.
+// the highest votes come first. See SortVotes and AssureSorted for this.
 // You can set Sorted to true if you have already sorted them (for example in a database query).
 // The SortVotes method will in-place sort the Votes, thus changing the original slice.
+// The Tally method always calls AssureSorted.
 type MedianPoll struct {
 	Value  MedianUnit
 	Votes  []*MedianVote
@@ -117,6 +152,7 @@ func NewMedianPoll(value MedianUnit, votes []*MedianVote) *MedianPoll {
 	}
 }
 
+// PollType returns the constant MedianPollType.
 func (poll *MedianPoll) PollType() string {
 	return MedianPollType
 }
@@ -126,6 +162,7 @@ func (poll *MedianPoll) PollType() string {
 // It could lead to "weird" results if the value the voters agreed upon was > poll.Value.
 // This way the poll gets filtered by updating the value of such a vote to poll.Value.
 // The result returned contains the original entries with a value > poll.Value (for logging purposes).
+// The returned result contains shallow copies of the culprit (i.e. Value is copied and the *Voter object is re-used).
 //
 // Note: If you use this method the sorting order should be maintained, everyone who voted with a value > poll.Value
 // should be at the beginning of the slice and are now set to poll.Value. Because all other votes have a value <=
@@ -174,9 +211,9 @@ func (poll *MedianPoll) WeightSum() Weight {
 // MedianResult is the result of evaluating a median poll, see Tally method.
 //
 // The result contains the following information:
-// WeightSum the sum of all weights from the votes.
-// RequiredMajority the majority that was required for the winning value.
-// MajorityValue the highest value that had the RequiredMajority.
+// WeightSum is the sum of all weights from the votes.
+// RequiredMajority is the majority that was required for the winning value.
+// MajorityValue is the highest value that had the RequiredMajority.
 // ValueDetails maps all values that occurred in at least one vote and maps it to the voters that voted for this value.
 // This map can be further analyzed with GetVotersForValue.
 type MedianResult struct {
@@ -188,7 +225,7 @@ type MedianResult struct {
 
 // NewMedianResult returns a new MedianResult.
 //
-// The returned instance has RequiredMajority set to NoWeight, MajorityValue set to NoMedianUnitValue
+// The returned instance has WeightSum and RequiredMajority set to NoWeight, MajorityValue set to NoMedianUnitValue
 // and ValueDetails to an empty map.
 func NewMedianResult() *MedianResult {
 	return &MedianResult{

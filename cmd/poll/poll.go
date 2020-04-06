@@ -41,6 +41,8 @@ type mainContext struct {
 	VotersSourceFileName string
 	// in case collection was loaded from a file this value is set to this path
 	CollectionSourceFileName string
+	Matrix                   *gopolls.VotersMatrix
+	MatrixSourceFileName     string
 }
 
 type renderContext struct {
@@ -59,6 +61,7 @@ type handlerRes struct {
 	Status      int
 	Redirect    string
 	ContentType string
+	FileName    string
 	Err         error
 }
 
@@ -93,7 +96,12 @@ func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 		delta := time.Since(start)
 		log.Println("Handler done after", delta)
 		if handlerRes.ContentType != "" {
-			w.Header().Add("Content-Type", handlerRes.ContentType)
+			w.Header().Set("Content-Type", handlerRes.ContentType)
+			if handlerRes.FileName != "" {
+				w.Header().Set("Content-Disposition",
+					fmt.Sprintf("attachment; filename=%s", handlerRes.FileName))
+			}
+
 		}
 		if err := handlerRes.Err; err != nil {
 			log.Println("Unable to write to http response", err)
@@ -309,6 +317,82 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 	return newHandlerRes(http.StatusInternalServerError, collectionErr)
 }
 
+type evaluationHandler struct {
+	template *template.Template
+}
+
+func newEvaluationHandler(base *template.Template) *evaluationHandler {
+	t := readTemplate(base, "evaluate.gohtml")
+	return &evaluationHandler{t}
+}
+
+func (h *evaluationHandler) handleWithMatrix(fileName string, matrix *gopolls.VotersMatrix, ctx *renderContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	voters, pollSkells, matrixErr := matrix.PrepareAndVerifyVotesMatrix()
+	if matrixErr != nil {
+		log.Println("Error verifying matrix:", matrixErr)
+	}
+	// translate skeletons to polls
+	convertFunction := gopolls.NewDefaultSkeletonConverter(true)
+	polls, convertErr := gopolls.ConvertSkeletonsToPolls(pollSkells,
+		convertFunction)
+	if convertErr != nil {
+		// something is wrong
+		return newHandlerRes(http.StatusInternalServerError, convertErr)
+	}
+
+	fmt.Println("Jup", voters, polls)
+	return newHandlerRes(http.StatusOK, nil)
+}
+
+func (h *evaluationHandler) handleMatrixErr(fileName string, err error, ctx *renderContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	// internal errors (we need a nicer way of doing this) are reported as error, otherwise an internal server
+	// error is returned
+	switch err.(type) {
+	case gopolls.PollingSyntaxError, gopolls.DuplicateError, gopolls.SkelTypeConversionError:
+		ctx.AdditionalData["error"] = err
+		return executeTemplate(h.template, ctx, buff)
+	}
+	return newHandlerRes(http.StatusInternalServerError, err)
+}
+
+func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+
+	renderContext := newRenderContext(context)
+
+	if r.Method == http.MethodGet {
+		return executeTemplate(h.template, renderContext, buff)
+	}
+
+	// test that both voters and polls are not empty
+	if len(context.Voters) == 0 || context.PollCollection.NumSkeletons() == 0 {
+		return h.handleMatrixErr("", nil,
+			renderContext, buff, r)
+	}
+
+	// already clear matrix
+	context.Matrix = nil
+	context.MatrixSourceFileName = ""
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		return newHandlerRes(http.StatusInternalServerError, err)
+	}
+
+	file, handler, formErr := r.FormFile("matrix-file")
+	if formErr != nil {
+		return newHandlerRes(http.StatusInternalServerError, formErr)
+	}
+
+	defer file.Close()
+
+	// now try to parse the matrix and validate it
+	matrix, matrixErr := gopolls.NewVotersMatrixFromCSV(file, context.Voters, context.PollCollection)
+	if matrixErr != nil {
+		return h.handleMatrixErr(handler.Filename, matrixErr, renderContext, buff, r)
+	}
+
+	return h.handleWithMatrix(handler.Filename, matrix, renderContext, buff, r)
+
+}
+
 type exportCSVTemplateHandler struct{}
 
 func newExportCSVTemplateHandler() exportCSVTemplateHandler {
@@ -324,6 +408,7 @@ func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffe
 	}
 	res := newHandlerRes(http.StatusOK, nil)
 	res.ContentType = "text/csv"
+	res.FileName = "votes.csv"
 	return res
 }
 
@@ -339,10 +424,12 @@ func main() {
 	votersH := newVotersHandler(base)
 	pollsH := newPollsHandler(base)
 	csvH := newExportCSVTemplateHandler()
+	evaluateH := newEvaluationHandler(base)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(pkger.Dir("/cmd/poll/static"))))
 	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
 	http.HandleFunc("/polls/", toHandleFunc(pollsH, &context))
 	http.HandleFunc("/votes/csv/", toHandleFunc(csvH, &context))
+	http.HandleFunc("/evaluate/", toHandleFunc(evaluateH, &context))
 	http.HandleFunc("/", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)

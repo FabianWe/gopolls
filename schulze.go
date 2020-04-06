@@ -21,8 +21,11 @@ import (
 	"strings"
 )
 
+// SchulzeMatrix is a matrix used to represent the matrices d and p.
+// It is assumed to be of dimension n × n.
 type SchulzeMatrix [][]Weight
 
+// NewSchulzeMatrix returns a new matrix given the dimension, so the resulting matrix is of size n × n.
 func NewSchulzeMatrix(dimension int) SchulzeMatrix {
 	var res SchulzeMatrix = make(SchulzeMatrix, dimension)
 	for i := 0; i < dimension; i++ {
@@ -31,6 +34,8 @@ func NewSchulzeMatrix(dimension int) SchulzeMatrix {
 	return res
 }
 
+// Equals tests if two matrices are the same.
+// Note that this method (like all others) assume a matrix of size n × n.
 func (m SchulzeMatrix) Equals(other SchulzeMatrix) bool {
 	n1, n2 := len(m), len(other)
 	if n1 != n2 {
@@ -48,8 +53,17 @@ func (m SchulzeMatrix) Equals(other SchulzeMatrix) bool {
 	return true
 }
 
+// SchulzeRanking is a ranking for a Schulze poll.
+//
+// The ranking must have one entry for each option of the poll.
+// The entries of the ranking describe the ranked position for the option.
+//
+// Consider a poll with three alternatives ["A", "B", "C"].
+// Then the ranking [1, 0, 1] would represent the ranking B > A = C.
+// That is the smaller the value the more "important" or higher ranked the option.
 type SchulzeRanking []int
 
+// NewSchulzeRanking returns a new SchulzeRanking with a size of 0.
 func NewSchulzeRanking() SchulzeRanking {
 	return make(SchulzeRanking, 0)
 }
@@ -75,11 +89,14 @@ func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 	return res, nil
 }
 
+// SchulzeVote is a vote for a SchulzePoll.
+// It is described by the voter and the ranking of said voter. It implements the interface AbstractVote.
 type SchulzeVote struct {
 	Voter   *Voter
 	Ranking SchulzeRanking
 }
 
+// NewSchulzeVote returns a new SchulzeVote.
 func NewSchulzeVote(voter *Voter, ranking SchulzeRanking) *SchulzeVote {
 	return &SchulzeVote{
 		Voter:   voter,
@@ -87,19 +104,33 @@ func NewSchulzeVote(voter *Voter, ranking SchulzeRanking) *SchulzeVote {
 	}
 }
 
+// SchulzeVoteParser implements VoteParser and returns an instance of SchulzeVote in its ParseFromString method.
+//
+// The ranking is assumed to be a comma separated list of integers, for example "1, 0, 1" (slashes are also okay,
+// so "1/0/1" would be the same).
+// See documentation of SchulzeRanking for more details about the ranking.
+//
+// It allows to set the length that is expected from the ranking string. If the string describes a ranking
+// not equal to length an error is returned.
 type SchulzeVoteParser struct {
 	Length int
 }
 
-func NewSchuleVoteParser(length int) SchulzeVoteParser {
-	return SchulzeVoteParser{Length: length}
+// NewSchuleVoteParser returns a new SchulzeVoteParser.
+//
+// The length argument is allowed to be negative in which case the length check is disabled.
+// Set it to a length >= 0 to enable the check or use WithLength.
+func NewSchuleVoteParser(length int) *SchulzeVoteParser {
+	return &SchulzeVoteParser{Length: length}
 }
 
-func (parser SchulzeVoteParser) WithLength(length int) SchulzeVoteParser {
-	return SchulzeVoteParser{Length: length}
+// WithLength returns a shallow copy of the parser with only length set to the new value.
+func (parser *SchulzeVoteParser) WithLength(length int) *SchulzeVoteParser {
+	return &SchulzeVoteParser{Length: length}
 }
 
-func (parser SchulzeVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
+// ParseFromString implements the VoteParser interface, for details see type description.
+func (parser *SchulzeVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
 	ranking, err := parserSchulzeRanking(s, parser.Length)
 	if err != nil {
 		return nil, err
@@ -107,21 +138,42 @@ func (parser SchulzeVoteParser) ParseFromString(s string, voter *Voter) (Abstrac
 	return NewSchulzeVote(voter, ranking), nil
 }
 
+// GetVoter returns the voter of the vote.
 func (vote *SchulzeVote) GetVoter() *Voter {
 	return vote.Voter
 }
 
+// VoteType returns the constant SchulzeVoteType.
 func (vote *SchulzeVote) VoteType() string {
 	return SchulzeVoteType
 }
 
+// SchulzeWinsList describes the winning groups of a Schulze poll.
+// The first list contains all options  that are ranked highest, the next list all entries ranked second
+// best and so on.
+// Each option should appear in at least one of the lists.
 type SchulzeWinsList [][]int
 
+// SchulzePoll is a poll that can be evaluated with the Schulze method, see https://en.wikipedia.org/wiki/Schulze_method
+// for details.
+// It implements the interface AbstractPoll.
+//
+// A poll instance has the number of options in the poll (must be a positive int) and all votes for the poll.
+//
+// Note that all votes must have a ranking of length NumVotes. If this is not the case the the vote
+// will be silently dropped. You should use TruncateVoters first to identify problematic cases.
+//
+// The implementation was inspired by the German Wikipedia article (https://de.wikipedia.org/wiki/Schulze-Methode)
+// and https://github.com/mgp/schulze-method.
 type SchulzePoll struct {
 	NumOptions int
 	Votes      []*SchulzeVote
 }
 
+// NewSchulzePoll returns a new SchulzePoll.
+// numOptions must be >= 0, otherwise this function panics.
+// Note that the votes are not validated (have the correct ranking length).
+// Use TruncateVoters to identify invalid votes.
 func NewSchulzePoll(numOptions int, votes []*SchulzeVote) *SchulzePoll {
 	if numOptions < 0 {
 		panic(fmt.Sprintf("Num options in SchulzePoll must be >= 0, got %d", numOptions))
@@ -132,10 +184,16 @@ func NewSchulzePoll(numOptions int, votes []*SchulzeVote) *SchulzePoll {
 	}
 }
 
+// PollType returns the constant SchulzePollType.
 func (poll *SchulzePoll) PollType() string {
 	return SchulzePollType
 }
 
+// TruncateVoters removes all voters that have a ranking with length != poll.NumOptions.
+//
+// If such culprits are found they are removed from poll.Votes. In this case a new slice of votes
+// will be allocated containing the original vote objects.
+// All culprits are returned (for logging or error handling).
 func (poll *SchulzePoll) TruncateVoters() []*SchulzeVote {
 	// culprits: all with an invalid number of elements in ranking
 	// filtered: the filtered list to use as new votes
@@ -172,6 +230,9 @@ func (poll *SchulzePoll) computeD() SchulzeMatrix {
 	for _, vote := range poll.Votes {
 		w := vote.Voter.Weight
 		ranking := vote.Ranking
+		if len(ranking) != n {
+			continue
+		}
 		for i := 0; i < n; i++ {
 			for j := i + 1; j < n; j++ {
 				if ranking[i] < ranking[j] {
@@ -213,6 +274,7 @@ func (poll *SchulzePoll) computeP(d SchulzeMatrix) SchulzeMatrix {
 	return res
 }
 
+// inspired by https://github.com/mgp/schulze-method/blob/master/schulze.py
 func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 	n := poll.NumOptions
 	// maps: number of wins to candidates with numwins
@@ -227,7 +289,7 @@ func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 		}
 		winsList, has := candidateWins[numWins]
 		if !has {
-			winsList = make([]int, 0)
+			winsList = make([]int, 0, 1)
 			numWinsKeys = append(numWinsKeys, numWins)
 		}
 		winsList = append(winsList, i)
@@ -246,11 +308,16 @@ func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 	return res
 }
 
+// SchulzeResult is the result returned by the Schulze method.
+//
+// It stores (for testing and further investigation) the matrices d and p and of course the
+// sorted winning groups as a SchulzeWinsList.
 type SchulzeResult struct {
 	D, P         SchulzeMatrix
 	RankedGroups SchulzeWinsList
 }
 
+// NewSchulzeResult returns a new SchulzeResult.
 func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList) *SchulzeResult {
 	return &SchulzeResult{
 		D:            d,
@@ -259,6 +326,10 @@ func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList) *Schulze
 	}
 }
 
+// Tally computes the result of a Schulze poll.
+//
+// Note that all voters with an invalid ranking (length is not poll.NumOptions) are silently discarded.
+// Use TruncateVoters before to find such votes.
 func (poll *SchulzePoll) Tally() *SchulzeResult {
 	d := poll.computeD()
 	p := poll.computeP(d)

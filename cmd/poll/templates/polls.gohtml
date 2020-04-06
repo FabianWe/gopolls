@@ -23,9 +23,9 @@
             </thead>
             {{range $i, $group := .PollCollection.Groups}}
                 <tr>
-                    <td>{{$i}}</td>
+                    <td><b>{{$i}}</b></td>
                     <td colspan="3">
-                        {{$group.Title}}
+                        <b>{{$group.Title}}</b>
                     </td>
                 </tr>
                 {{range $j, $skel := $group.Skeletons}}

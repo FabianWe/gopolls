@@ -1,7 +1,27 @@
 {{block "content" .}}
     <h2 class="content-subhead">Evaluate Polls</h2>
 
-    {{if and .PollCollection.NumSkeletons .Voters }}
+    {{if .AdditionalData.error}}
+        <div class="bar error">
+            &#9747; Input error: {{.AdditionalData.error}}
+        </div>
+        <br>
+    {{end}}
 
+    {{if and .PollCollection.NumSkeletons .Voters }}
+        <form class="pure-form" method="post" enctype="multipart/form-data">
+            <fieldset>
+                <legend>Choose a voters matrix (csv file)</legend>
+
+                <label for="matrix-file">
+                    <input type="file" id="matrix-file" name="matrix-file">
+                </label>
+                <button type="submit" class="pure-button pure-button-primary">Evaluate</button>
+            </fieldset>
+        </form>
+
+        Export csv template <a href="/votes/csv/">here</a>.
+    {{else}}
+        Upload voters and poll structure first!
     {{end}}
 {{end}}

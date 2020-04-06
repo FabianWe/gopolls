@@ -20,11 +20,17 @@ import (
 	"strconv"
 )
 
+// CurrencyValue represents a money value in a certain currency.
+// The value is always represented as "cents", for example 1.23 € would be represented
+// as ValueCents=123 and currency "€".
+//
+// There are also interfaces defined for formatting / parsing currency values.
 type CurrencyValue struct {
 	ValueCents int
 	Currency   string
 }
 
+// NewCurrencyValue returns a new CurrencyValue.
 func NewCurrencyValue(valueCents int, currency string) CurrencyValue {
 	return CurrencyValue{
 		ValueCents: valueCents,
@@ -36,26 +42,55 @@ func (value CurrencyValue) String() string {
 	return fmt.Sprintf("CurrencyValue{ValueCents: %d, Currency: %s}", value.ValueCents, value.Currency)
 }
 
+// Equals tests if two CurrencyValue objects are identical.
+//
+// Not that this method does not do "semantic" comparison on the currency, for example one could say tat
+// {42, "€"} is equal to {42, "EUR"}.
+// It directly compares ValueCents and Currency.
 func (value CurrencyValue) Equals(other CurrencyValue) bool {
 	return value.ValueCents == other.ValueCents &&
 		value.Currency == other.Currency
 }
 
+// CurrencyFormatter formats a currency value to a string.
 type CurrencyFormatter interface {
 	Format(value CurrencyValue) string
 }
 
+// CurrencyParser parses a currency value from a string, error should be of type PollingSyntaxError or
+// PollingSemanticError.
 type CurrencyParser interface {
 	Parse(s string) (CurrencyValue, error)
 }
 
+// CurrencyHandler combines formatter and parser in one interface.
+//
+// A general rule of thumb is: If a formatter returns a string representation for a currency value that same currency
+// value should be parsed correctly back without errors.
 type CurrencyHandler interface {
 	CurrencyFormatter
 	CurrencyParser
 }
 
+// SimpleEuroHandler is an implementation of CurrencyHandler (and thus CurrencyFormatter and CurrencyParser).
+//
+// It is, at the moment, the only implementation available.
+//
+// It returns always strings of the form "1.23 €" or "1.23" (depending on whether Currency is set to an empty string
+// or not).
+// Note that this formatter always uses "€" as the currency symbol, even if Currency was set to "$".
+//
+// The parser allows strings of the form "42€", "21.42 €", "-42€", "21,42 €" (both , and . are allowed to be used as
+// decimal separator, no thousands separator is supported).
 type SimpleEuroHandler struct{}
 
+var (
+	// DefaultCurrencyHandler is the default CurrencyHandler, it is a SimpleEuroHandler, but it is not guaranteed
+	// that this never changes.
+	DefaultCurrencyHandler CurrencyHandler = SimpleEuroHandler{}
+)
+
+// Format implements the CurrencyFormatter interface.
 func (h SimpleEuroHandler) Format(value CurrencyValue) string {
 	if value.ValueCents < 0 {
 		positiveValue := CurrencyValue{
@@ -84,13 +119,15 @@ func (h SimpleEuroHandler) Format(value CurrencyValue) string {
 	}
 }
 
+// simpleEuroRx is the regex used to parse values in with the SimpleEuroHandler.
 var simpleEuroRx = regexp.MustCompile(`^\s*(-)?\s*(\d+)(?:[,.](\d{1,2}))?\s*(€)?\s*$`)
 
+// Parse implements the CurrencyParser interface.
 func (h SimpleEuroHandler) Parse(s string) (CurrencyValue, error) {
 	res := CurrencyValue{}
 	match := simpleEuroRx.FindStringSubmatch(s)
 	if len(match) == 0 {
-		return res, fmt.Errorf("not a valid currency string: %s", s)
+		return res, NewPollingSyntaxError(nil, "not a valid currency string: %s", s)
 	}
 	minus, euroStr, centsStr, currencySymbol := match[1], match[2], match[3], match[4]
 	// try to parse fullEuroCents string first
