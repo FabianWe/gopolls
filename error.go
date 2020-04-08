@@ -14,25 +14,32 @@
 
 package gopolls
 
-// PollError is an error returned from all method indicating an error from inside gopolls.
-// Usually errors like syntax error are just wrapped in a PollError while errors from reading from a stream etc.
-// are returned directly.
-// This way you can check if the error was caused by gopolls or if something went wrong while reading / writing
-// to a certain source.
-type PollError struct {
-	// The actual error
-	Err error
+// internalErrorSentinelType is used only for the constant "ErrPoll", this way we have one sentinel value
+// to expose.
+// The type PollError tests for this constant in its Is(error) method.
+type internalErrorSentinelType struct{}
+
+// The type must implement the error interface.
+func (err internalErrorSentinelType) Error() string {
+	return "gopolls error"
 }
 
-// NewPollError returns a new PollError.
-func NewPollError(actual error) *PollError {
-	return &PollError{Err: actual}
-}
+// ErrPoll is a constant that can be used with a type check.
+// All internal errors (such as syntax error) can be used in a statement like erorrs.Is(err, ErrPoll)
+// and return true.
+// This can be useful when you want to distinguish between an error from gopolls and an "outside" error.
+// If you want to dig deeper, for example find out if an error is a syntax error, you should use
+// errors.As(err, *ERROR_TYPE).
+var ErrPoll = internalErrorSentinelType{}
 
-func (err PollError) Error() string {
-	return err.Err.Error()
-}
+// PollError is an error used for errors that should be considered a polling error, such as syntax
+// error, evaluation errors for your own poll types etc.
+// The type itself does not implement the error interface, but only the method Is(err error) from the error
+// package.
+// This way you can just embed this type in your own error type and Is(err, ErrPoll) will return true.
+type PollError struct{}
 
-func (err PollError) Unwrap() error {
-	return err.Err
+// Is returns true if err == ErrPoll.
+func (internal PollError) Is(err error) bool {
+	return err == ErrPoll
 }
