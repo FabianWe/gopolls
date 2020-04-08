@@ -40,10 +40,14 @@ func (voter *Voter) Format(indent string) string {
 	return fmt.Sprintf("%s* %s: %d", indent, voter.Name, voter.Weight)
 }
 
+// Equals tests if two voters are equal (have the same name and weight).
 func (voter *Voter) Equals(other *Voter) bool {
 	return voter.Name == other.Name && voter.Weight == other.Weight
 }
 
+// HasDuplicateVoters tests if there are duplicate names in a given voters list.
+// It returns false if there are no duplicates, otherwise the first name that was found multiple times is returned
+// together with true.
 func HasDuplicateVoters(voters []*Voter) (string, bool) {
 	nameSet := make(map[string]struct{}, len(voters))
 	for _, voter := range voters {
@@ -55,6 +59,8 @@ func HasDuplicateVoters(voters []*Voter) (string, bool) {
 	return "", false
 }
 
+// VotersToMap returns a map from voter name to voter object.
+// If it finds a a duplicate in the names of voters it returns nil and a DuplicateError.
 func VotersToMap(voters []*Voter) (map[string]*Voter, error) {
 	res := make(map[string]*Voter, len(voters))
 	for _, voter := range voters {
