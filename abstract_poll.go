@@ -21,7 +21,7 @@ import (
 
 // AbstractPoll describes any poll.
 // It has only one method PollType which returns the type as a string.
-// Must operations dealing with polls do type assertions / switches are operate depending on the string of PolLType().
+// Most operations dealing with polls do type assertions / switches are operate depending on the string of PolLType().
 //
 // Constants are defined for implemented poll types: MedianPollType, SchulzePollType and BasicPollType.
 type AbstractPoll interface {
@@ -35,17 +35,22 @@ const (
 )
 
 // SkelTypeConversionError is an error returned if a skeleton can't be converted to a poll (because for example it hash
-// and unkown type).
-type SkelTypeConversionError string
+// and unknown type).
+type SkelTypeConversionError struct {
+	PollError
+	Msg string
+}
 
 // NewSkelTypeConversionError returns a new SkelTypeConversionError given a format string and the values for the
-// placeholders.
+// placeholders (like fmt.Sprintf).
 func NewSkelTypeConversionError(msg string, a ...interface{}) SkelTypeConversionError {
-	return SkelTypeConversionError(fmt.Sprintf(msg, a...))
+	return SkelTypeConversionError{
+		Msg: fmt.Sprintf(msg, a...),
+	}
 }
 
 func (err SkelTypeConversionError) Error() string {
-	return string(err)
+	return err.Msg
 }
 
 // SkeletonConverter is a function that takes a skeleton and returns an empty poll for this skeleton.

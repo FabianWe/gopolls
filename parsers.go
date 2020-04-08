@@ -30,6 +30,7 @@ import (
 // It can wrap another error (set to nil if not required) and has an optional line number, if this number is < 0
 // the line number is assumed to be unknown / not existing for this error.
 type PollingSyntaxError struct {
+	PollError
 	Err     error
 	Msg     string
 	LineNum int
@@ -56,6 +57,7 @@ func (err PollingSyntaxError) WithLineNum(lineNum int) PollingSyntaxError {
 }
 
 // convertParserErr wraps a call to PollingSyntaxError.WithLineNum if err is of type PollingSyntaxError.
+// We don't use errors.Is here because we want the exact type.
 func convertParserErr(err error, lineNum int) error {
 	if err == nil {
 		return nil
@@ -94,6 +96,7 @@ func (err PollingSyntaxError) Unwrap() error {
 //
 // it can wrap another error (set to nil of not required).
 type PollingSemanticError struct {
+	PollError
 	Err error
 	Msg string
 }

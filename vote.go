@@ -41,17 +41,22 @@ type VoteParser interface {
 // Usually a skeleton "implies" a parser, for example sets the number of expected options or a maximal value
 // on a parser.
 // This error is used to signal that no parser could be created for a skeleton / description.
-type ParserGenerationError string
+type ParserGenerationError struct {
+	PollError
+	Msg string
+}
 
 // NewParserGenerationError returns a new ParserGenerationError.
 //
 // The error message can be formatted like in fmt.Sprintf().
 func NewParserGenerationError(msg string, a ...interface{}) ParserGenerationError {
-	return ParserGenerationError(fmt.Sprintf(msg, a...))
+	return ParserGenerationError{
+		Msg: fmt.Sprintf(msg, a...),
+	}
 }
 
 func (err ParserGenerationError) Error() string {
-	return string(err)
+	return err.Msg
 }
 
 // GenerateDefaultParsers creates the parser for a list of polls.
@@ -176,6 +181,16 @@ type VotesCSVReader struct {
 	csv *csv.Reader
 }
 
+// wrapError wraps an error that occurred during reading, if it is a CSV parse error it returns a PollingSyntaxError.
+// The CSV error is not wrapped so clients don't rely on the csv internal errors.
+// It must only be called with err != nil.
+func (r *VotesCSVReader) wrapError(err error) error {
+	if asCsvErr, ok := err.(*csv.ParseError); ok {
+		return NewPollingSyntaxError(nil, asCsvErr.Error())
+	}
+	return err
+}
+
 // NewVotesCSVReader returns a VotesCSVReader reading from r.
 func NewVotesCSVReader(r io.Reader) *VotesCSVReader {
 	reader := csv.NewReader(r)
@@ -191,7 +206,7 @@ func (r *VotesCSVReader) readHead() ([]string, error) {
 		return nil, NewPollingSyntaxError(nil, "no header found in csv file")
 	}
 	if err != nil {
-		return nil, err
+		return nil, r.wrapError(err)
 	}
 	if len(res) == 0 {
 		return nil, NewPollingSyntaxError(nil, "expected at least the voter column in csv file")
@@ -220,9 +235,7 @@ func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err err
 	if err != nil {
 		head = nil
 		lines = nil
-		if e, isCsvParseErr := err.(*csv.ParseError); isCsvParseErr {
-			err = NewPollingSyntaxError(e, "invalid csv file")
-		}
+		err = r.wrapError(err)
 	}
 
 	return
