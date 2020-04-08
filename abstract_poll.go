@@ -34,28 +34,28 @@ const (
 	BasicPollType   = "basic-poll"
 )
 
-// SkelTypeConversionError is an error returned if a skeleton can't be converted to a poll (because for example it hash
-// and unknown type).
-type SkelTypeConversionError struct {
+// SkeletonTypeError is an error returned if a skeleton has an invalid  / unsupported type by internal methods, for
+//example can't be converted to a poll.
+type SkeletonTypeError struct {
 	PollError
 	Msg string
 }
 
-// NewSkelTypeConversionError returns a new SkelTypeConversionError given a format string and the values for the
+// NewSkeletonTypeError returns a new SkeletonTypeError given a format string and the values for the
 // placeholders (like fmt.Sprintf).
-func NewSkelTypeConversionError(msg string, a ...interface{}) SkelTypeConversionError {
-	return SkelTypeConversionError{
+func NewSkeletonTypeError(msg string, a ...interface{}) SkeletonTypeError {
+	return SkeletonTypeError{
 		Msg: fmt.Sprintf(msg, a...),
 	}
 }
 
-func (err SkelTypeConversionError) Error() string {
+func (err SkeletonTypeError) Error() string {
 	return err.Msg
 }
 
 // SkeletonConverter is a function that takes a skeleton and returns an empty poll for this skeleton.
 // If an unknown type is encountered or the skeleton is in some way invalid it should return nil an error of type
-// SkelTypeConversionError.
+// SkeletonTypeError.
 //
 // An implementation is given in DefaultSkeletonConverter and a generator in NewDefaultSkeletonConverter.
 type SkeletonConverter func(skel AbstractPollSkeleton) (AbstractPoll, error)
@@ -93,7 +93,7 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 		value := typedSkel.Value
 		if value.ValueCents < 0 {
 			return nil,
-				NewSkelTypeConversionError("value for median poll (\"%s\") is not allowed to be < 0! got %d for poll \"%s\"",
+				NewSkeletonTypeError("value for median poll (\"%s\") is not allowed to be < 0! got %d for poll \"%s\"",
 					value.ValueCents, typedSkel.Name)
 		}
 		return NewMedianPoll(MedianUnit(value.ValueCents), make([]*MedianVote, 0, defaultVotesSize)), nil
@@ -103,7 +103,7 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 		switch numOptions {
 		case 0, 1:
 			return nil,
-				NewSkelTypeConversionError("got only %d options, but at least two options are required. poll is \"%s\"",
+				NewSkeletonTypeError("got only %d options, but at least two options are required. poll is \"%s\"",
 					numOptions, typedSkel.Name)
 		case 2:
 			if convertToBasic {
@@ -114,7 +114,7 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 			return NewSchulzePoll(numOptions, make([]*SchulzeVote, 0, defaultVotesSize)), nil
 		}
 	default:
-		return nil, NewSkelTypeConversionError("only money polls (median) and basic polls (e.g. normal poll, schulze are supported). Got type %s",
+		return nil, NewSkeletonTypeError("only money polls (median) and basic polls (e.g. normal poll, schulze are supported). Got type %s",
 			reflect.TypeOf(skel))
 	}
 }
