@@ -1,6 +1,8 @@
 BUILD_DIR=./build
 OUT_DIR=./out
 
+all: compile
+
 clean_build_dir:
 	rm -rf $(BUILD_DIR)
 
