@@ -252,7 +252,7 @@ func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err err
 // VotersMatrix describes a matrix has it has been parsed from a csv file.
 //
 // VotesCSVReader gives you a method to read the lines and return it as a "string" matrix.
-// This struct can be used to represent additional information about the matrix, for example
+// This struct can be used to represent additional information about the matrix, for example see
 // NewVotersMatrixFromCSV.
 // But this method (and this whole type) is rather tailored to my use case, but it should give you an idea.
 //
