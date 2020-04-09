@@ -1,6 +1,10 @@
 # IDE
 .idea
 
+# produced build / output directory for binary releases
+out
+build
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
