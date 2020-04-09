@@ -62,13 +62,18 @@ func WeightMax(a, b Weight) Weight {
 // DuplicateError is an error returned if somewhere a duplicate name is found.
 //
 // For example two voter objects with the same name.
-type DuplicateError string
+type DuplicateError struct {
+	PollError
+	Msg string
+}
 
 // NewDuplicateError returns a new DuplicateError.
 func NewDuplicateError(msg string) DuplicateError {
-	return DuplicateError(msg)
+	return DuplicateError{
+		Msg: msg,
+	}
 }
 
 func (err DuplicateError) Error() string {
-	return string(err)
+	return err.Msg
 }
