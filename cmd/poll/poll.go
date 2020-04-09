@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/FabianWe/gopolls"
@@ -46,8 +47,6 @@ type mainContext struct {
 	VotersSourceFileName string
 	// in case collection was loaded from a file this value is set to this path
 	CollectionSourceFileName string
-	Matrix                   *gopolls.VotersMatrix
-	MatrixSourceFileName     string
 }
 
 type renderContext struct {
@@ -224,16 +223,13 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 		return res
 	}
 
-	// if an error occurred: if it is a syntax error or duplicate error render the error, otherwise return internal
-	// error
-	switch votersErr.(type) {
-	case gopolls.PollingSyntaxError, gopolls.DuplicateError:
+	// if an error occurred: if it is an internal gopolls error render it
+	if errors.Is(votersErr, gopolls.ErrPoll) {
 		renderContext.AdditionalData["error"] = votersErr
 		return render()
-	default:
-		return newHandlerRes(http.StatusInternalServerError, votersErr)
 	}
 
+	return newHandlerRes(http.StatusInternalServerError, votersErr)
 }
 
 type pollsHandler struct {
@@ -292,9 +288,9 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 		return res
 	}
 
-	// if an error occurred: if it is a syntax error render the error, otherwise return internal error
-	if syntaxErr, ok := collectionErr.(gopolls.PollingSyntaxError); ok {
-		renderContext.AdditionalData["error"] = syntaxErr
+	// if an error occurred: if it is a gopoll internal error display it
+	if errors.Is(collectionErr, gopolls.ErrPoll) {
+		renderContext.AdditionalData["error"] = collectionErr
 		return render()
 	}
 
@@ -302,60 +298,32 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 }
 
 type evaluationHandler struct {
-	template *template.Template
+	template                  *template.Template
+	evaluationResultsTemplate *template.Template
 }
 
 func newEvaluationHandler(base *template.Template) *evaluationHandler {
-	t := readTemplate(base, "evaluate.gohtml")
-	return &evaluationHandler{t}
-}
-
-func (h *evaluationHandler) handleWithMatrix(fileName string, matrix *gopolls.VotersMatrix, ctx *renderContext, buff *bytes.Buffer, r *http.Request) handlerRes {
-	voters, pollSkells, matrixErr := matrix.PrepareAndVerifyVotesMatrix()
-	if matrixErr != nil {
-		log.Println("Error verifying matrix:", matrixErr)
+	standardTemplate := readTemplate(base, "evaluate.gohtml")
+	evaluationResultsTemplate := readTemplate(base, "evaluation_results.gohtml")
+	return &evaluationHandler{
+		template:                  standardTemplate,
+		evaluationResultsTemplate: evaluationResultsTemplate,
 	}
-	// translate skeletons to polls
-	convertFunction := gopolls.NewDefaultSkeletonConverter(true)
-	polls, convertErr := gopolls.ConvertSkeletonsToPolls(pollSkells,
-		convertFunction)
-	if convertErr != nil {
-		// something is wrong
-		return newHandlerRes(http.StatusInternalServerError, convertErr)
-	}
-
-	fmt.Println("Jup", voters, polls)
-	return newHandlerRes(http.StatusOK, nil)
-}
-
-func (h *evaluationHandler) handleMatrixErr(fileName string, err error, ctx *renderContext, buff *bytes.Buffer, r *http.Request) handlerRes {
-	// internal errors (we need a nicer way of doing this) are reported as error, otherwise an internal server
-	// error is returned
-	switch err.(type) {
-	case gopolls.PollingSyntaxError, gopolls.DuplicateError, gopolls.PollTypeError:
-		ctx.AdditionalData["error"] = err
-		return executeTemplate(h.template, ctx, buff)
-	}
-	return newHandlerRes(http.StatusInternalServerError, err)
 }
 
 func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
 
 	renderContext := newRenderContext(context)
 
-	if r.Method == http.MethodGet {
+	render := func(err error) handlerRes {
 		return executeTemplate(h.template, renderContext, buff)
 	}
 
-	// test that both voters and polls are not empty
-	if len(context.Voters) == 0 || context.PollCollection.NumSkeletons() == 0 {
-		return h.handleMatrixErr("", nil,
-			renderContext, buff, r)
+	if r.Method == http.MethodGet {
+		return render(nil)
 	}
 
-	// already clear matrix
-	context.Matrix = nil
-	context.MatrixSourceFileName = ""
+	// try to read the matrix
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		return newHandlerRes(http.StatusInternalServerError, err)
 	}
@@ -367,15 +335,17 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 
 	defer file.Close()
 
-	// now try to parse the matrix and validate it
+	// try to parse the matrix
 	csvReader := gopolls.NewVotesCSVReader(file)
 	csvReader.Sep = ';'
 	matrix, matrixErr := gopolls.NewVotersMatrixFromCSV(csvReader, context.Voters, context.PollCollection)
 	if matrixErr != nil {
-		return h.handleMatrixErr(handler.Filename, matrixErr, renderContext, buff, r)
+		return render(matrixErr)
 	}
 
-	return h.handleWithMatrix(handler.Filename, matrix, renderContext, buff, r)
+	fmt.Println(matrix, handler.Filename)
+
+	return newHandlerRes(http.StatusOK, nil)
 
 }
 
