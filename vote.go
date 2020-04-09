@@ -285,8 +285,8 @@ func NewVotersMatrixFromCSV(r *VotesCSVReader, voters []*Voter, polls *PollSkele
 	if pollsMapErr != nil {
 		return nil, pollsMapErr
 	}
-	// read head and body of matrix
-	head, matrix, csvErr := r.ReadRecords()
+	// read head and body of stringMatrix
+	head, stringMatrix, csvErr := r.ReadRecords()
 	if csvErr != nil {
 		return nil, csvErr
 	}
@@ -294,7 +294,7 @@ func NewVotersMatrixFromCSV(r *VotesCSVReader, voters []*Voter, polls *PollSkele
 		Voters:      voters,
 		Polls:       polls,
 		MatrixHead:  head,
-		Matrix:      matrix,
+		Matrix:      stringMatrix,
 		VotersMap:   votersMap,
 		SkeletonMap: pollsMap,
 	}
@@ -389,24 +389,29 @@ func (m *VotersMatrix) PrepareAndVerifyVotesMatrix() ([]*Voter, []AbstractPollSk
 type EmptyVotePolicy int8
 
 const (
-	IgnoreEmpty EmptyVotePolicy = iota
-	AddAsNoEmpty
-	AddAsAbstention
+	IgnoreEmptyVote EmptyVotePolicy = iota
+	RaiseErrorEmptyVote
+	AddAsAyeEmptyVote
+	AddAsNoEmptyVote
+	AddAsAbstentionEmptyVote
 )
 
-func (m *VotersMatrix) generateVotesForPoll(pollIndex int, poll AbstractPoll, parser VoteParser) error {
+func (m *VotersMatrix) generateVotesForPoll(poll AbstractPoll, parser VoteParser) error {
 	// iterate over all voters and try to parse vote
 	return nil
 }
 
-func (m *VotersMatrix) DefaultFillWithVotes(pollsList []AbstractPoll, parsers []VoteParser) error {
-	// TODO use new error type?
+// idea: first convert skeleton to polls, then create parsers, then this method
+// before: validate
+func (m *VotersMatrix) DefaultFillWithVotes(pollsList []AbstractPoll, voters []*Voter, parsers []VoteParser) error {
 	if len(pollsList) != len(parsers) {
-		return fmt.Errorf("can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
+		return NewPollingSemanticError(nil,
+			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
 			len(pollsList), len(parsers))
 	}
 	if numPolls := m.Polls.NumSkeletons(); numPolls != len(parsers) {
-		return fmt.Errorf("can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
+		return NewPollingSemanticError(nil,
+			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
 			numPolls, len(parsers))
 	}
 

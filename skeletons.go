@@ -60,7 +60,7 @@ func DumpAbstractPollSkeleton(skel AbstractPollSkeleton, w io.Writer, currencyFo
 	case *PollSkeleton:
 		return typedSkel.Dump(w)
 	default:
-		return 0, NewSkeletonTypeError("skeleton must be either *MoneyPollSkeleton or *PollSkeleton, got type %s",
+		return 0, NewPollTypeError("skeleton must be either *MoneyPollSkeleton or *PollSkeleton, got type %s",
 			reflect.TypeOf(skel))
 	}
 }

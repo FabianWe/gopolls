@@ -332,7 +332,7 @@ func (h *evaluationHandler) handleMatrixErr(fileName string, err error, ctx *ren
 	// internal errors (we need a nicer way of doing this) are reported as error, otherwise an internal server
 	// error is returned
 	switch err.(type) {
-	case gopolls.PollingSyntaxError, gopolls.DuplicateError, gopolls.SkeletonTypeError:
+	case gopolls.PollingSyntaxError, gopolls.DuplicateError, gopolls.PollTypeError:
 		ctx.AdditionalData["error"] = err
 		return executeTemplate(h.template, ctx, buff)
 	}
