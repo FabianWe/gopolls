@@ -124,17 +124,22 @@ const (
 
 // CSV //
 
+const DefaultCSVSeparator = ','
+
 // VotesCSVWriter can be used to create a CSV file template for inserting polls in it.
 // Refer to the wiki for details about CSV files.
 type VotesCSVWriter struct {
+	Sep rune
 	csv *csv.Writer
 }
 
 // NewVotesCSVWriter returns a new VotesCSVWriter writing to w.
 func NewVotesCSVWriter(w io.Writer) *VotesCSVWriter {
 	writer := csv.NewWriter(w)
-	writer.Comma = ';'
-	return &VotesCSVWriter{csv: writer}
+	return &VotesCSVWriter{
+		Sep: DefaultCSVSeparator,
+		csv: writer,
+	}
 }
 
 func (w *VotesCSVWriter) writeCSVHead(skels []AbstractPollSkeleton) error {
@@ -162,6 +167,7 @@ func (w *VotesCSVWriter) writeEmptyRecords(voters []*Voter, skels []AbstractPoll
 //
 // It returns any errors from writing to w.
 func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []AbstractPollSkeleton) error {
+	w.csv.Comma = w.Sep
 	if err := w.writeCSVHead(skels); err != nil {
 		return err
 	}
@@ -178,6 +184,7 @@ func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abstract
 // For an example see NewVotersMatrixFromCSV, but you probably want your own method for dealing with parsed CSV
 // files.
 type VotesCSVReader struct {
+	Sep rune
 	csv *csv.Reader
 }
 
@@ -194,8 +201,8 @@ func (r *VotesCSVReader) wrapError(err error) error {
 // NewVotesCSVReader returns a VotesCSVReader reading from r.
 func NewVotesCSVReader(r io.Reader) *VotesCSVReader {
 	reader := csv.NewReader(r)
-	reader.Comma = ';'
 	return &VotesCSVReader{
+		Sep: DefaultCSVSeparator,
 		csv: reader,
 	}
 }
@@ -225,6 +232,7 @@ func (r *VotesCSVReader) readHead() ([]string, error) {
 // It returns any error reading from the source.
 // It might also return a PollingSyntaxError if the file is not correctly formed.
 func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err error) {
+	r.csv.Comma = r.Sep
 	head, err = r.readHead()
 	if err != nil {
 		return
@@ -268,7 +276,7 @@ type VotersMatrix struct {
 // csv file appears multiple times etc.
 //
 // PrepareAndVerifyVotesMatrix will do this for you however.
-func NewVotersMatrixFromCSV(r io.Reader, voters []*Voter, polls *PollSkeletonCollection) (*VotersMatrix, error) {
+func NewVotersMatrixFromCSV(r *VotesCSVReader, voters []*Voter, polls *PollSkeletonCollection) (*VotersMatrix, error) {
 	votersMap, votersMapErr := VotersToMap(voters)
 	if votersMapErr != nil {
 		return nil, votersMapErr
@@ -277,9 +285,8 @@ func NewVotersMatrixFromCSV(r io.Reader, voters []*Voter, polls *PollSkeletonCol
 	if pollsMapErr != nil {
 		return nil, pollsMapErr
 	}
-	csvReader := NewVotesCSVReader(r)
 	// read head and body of matrix
-	head, matrix, csvErr := csvReader.ReadRecords()
+	head, matrix, csvErr := r.ReadRecords()
 	if csvErr != nil {
 		return nil, csvErr
 	}

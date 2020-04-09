@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"time"
 )
 
@@ -367,7 +368,9 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	defer file.Close()
 
 	// now try to parse the matrix and validate it
-	matrix, matrixErr := gopolls.NewVotersMatrixFromCSV(file, context.Voters, context.PollCollection)
+	csvReader := gopolls.NewVotesCSVReader(file)
+	csvReader.Sep = ';'
+	matrix, matrixErr := gopolls.NewVotersMatrixFromCSV(csvReader, context.Voters, context.PollCollection)
 	if matrixErr != nil {
 		return h.handleMatrixErr(handler.Filename, matrixErr, renderContext, buff, r)
 	}
@@ -384,6 +387,7 @@ func newExportCSVTemplateHandler() exportCSVTemplateHandler {
 
 func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
 	csvWriter := gopolls.NewVotesCSVWriter(buff)
+	csvWriter.Sep = ';'
 	// write empty template
 	writeErr := csvWriter.GenerateEmptyTemplate(context.Voters, context.PollCollection.CollectSkeletons())
 	if writeErr != nil {
@@ -435,9 +439,50 @@ func doesDirExist(path string) bool {
 	return true
 }
 
+const copyrightStr = `Copyright 2020 Fabian Wenzelmann <fabianwen@posteo.eu>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.`
+
+const projectURL = "https://github.com/FabianWe/gopolls"
+
+func printUsage() {
+	prog := os.Args[0]
+	flag.CommandLine.SetOutput(os.Stdout)
+	// write usage
+	fmt.Printf("Use \"%s help\" to display this message\n", prog)
+	fmt.Printf("Use \"%s about\" to print copyright and meta information\n\n", prog)
+	fmt.Printf("Options for %s:\n\n", prog)
+	flag.PrintDefaults()
+}
+
+func printAbout() {
+	fmt.Printf("This is gopolls version %s (Go version %s)\n\n", version, runtime.Version())
+	fmt.Println(copyrightStr)
+	fmt.Printf("\nAdditional information such as third-party licesnses and usage\ninformation can be found on the project homepage at\n\t%s\n", projectURL)
+}
+
 func parseArgs() {
 	var rootString string
 	flag.StringVar(&rootString, "assets", "", "Directory in which the assets (templates and static) are, defaults to dir of executable")
+	// test if help was given
+	if len(os.Args) > 1 && os.Args[1] == "help" {
+		printUsage()
+		os.Exit(0)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "about" {
+		printAbout()
+		os.Exit(0)
+	}
 	flag.Parse()
 	if rootString == "" {
 		// try to get executable directory
