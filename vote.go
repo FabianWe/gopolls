@@ -49,6 +49,7 @@ type VoteParser interface {
 // For example a median poll can be customized by setting a max value, that is the maximal value this parser will parse.
 // The workflow then is this: Create a parser "template" with the default options you want to use and then customize
 // it for each poll with CustomizeForPoll.
+// An example and a helper function is given CustomizeParsers.
 //
 // In the median example: The template consists of a parser that allows all valid numbers / integers.
 // It is then customized for a certain poll by setting the max value of that poll.
@@ -420,6 +421,36 @@ func (m *VotersMatrix) verifyAndFillPolls() error {
 	return nil
 }
 
+// VoteGenerator is used to describe polls that can produce a poll specific vote type for a basic answer
+// (yes, no or abstention).
+//
+// It is not allowed to return a nil vote and error = nil, that is if there is no error the returned
+// vote is not allowed to be nil.
+//
+// It should return a PollTypeError if an answer is not supported (or not at all).
+// All polls implemented at the moment implement this interface.
+type VoteGenerator interface {
+	AbstractPoll
+	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
+}
+
+// EmptyVotePolicy describes the behavior if an "empty" vote is found.
+//
+// By empty vote we mean that a certain voter just didn't cast a vote for a poll.
+// If this is the case there are different things to do, depending on the application.
+//
+// The option that is chosen most often will probably be IgnoreEmptyVote: For a voter
+// there is no vote so just assume that the voter wasn't there when the poll took place
+// and ignore it (IgnoreEmptyVote).
+//
+// It is also possible to have polls where each voter has to cast a vote, in this case an
+// error should be returned (RaiseErrorEmptyVote).
+//
+// In certain cases even voters who didn't cast a vote should be considered, for example in
+// absolute majorities.
+// The empty votes can then be treated as "No", "Aye" or "Abstention" (No and Abstention or the most
+// likely options here). These are described by the policies AddAsAyeEmptyVote, AddAsNoEmptyVote
+// and AddAsAbstentionEmptyVote.
 type EmptyVotePolicy int8
 
 const (
@@ -430,13 +461,48 @@ const (
 	AddAsAbstentionEmptyVote
 )
 
-// VoteGenerator is used to describe polls that can produce a poll specific type for a
-// basic answer (yes, no or abstention).
-// It should return a PollTypeError if an answer is not supported (or not at all).
-// All polls implemented at the moment implement this interface.
-type VoteGenerator interface {
-	AbstractPoll
-	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
+// GenerateEmptyVoteForVoter can be called to generate a vote for a poll if the input was empty.
+// By empty we mean that the voter simple didn't cast a vote.
+// If this method is called it will chose the action depending on the policy.
+
+// If it is IgnoreEmptyVote it returns nil for the vote and nil as an error.
+// So be aware that a vote can be nil even if the error is nil.
+//
+// If the policy is RaiseErrorEmptyVote an error will be returned.
+//
+// In all other cases poll must implement VoteGenerator (if it does not an error is returned)
+// and the return value depends on the poll which is responsible to create an Aye, No or
+// Abstention vote.
+//
+// For the implemented types note that MedianPoll does not support abstention.
+func (policy EmptyVotePolicy) GenerateEmptyVoteForVoter(voter *Voter, poll AbstractPoll) (AbstractVote, error) {
+	switch policy {
+	case IgnoreEmptyVote:
+		return nil, nil
+	case RaiseErrorEmptyVote:
+		return nil, NewPollTypeError("empty vote is not allowed, but got an empty vote from voter \"%s\" for poll of type %s",
+			voter.Name, reflect.TypeOf(poll))
+	}
+	// in all other cases it must be called with a VoteGenerator
+	// must be called with a VoteGenerator
+	asGenerator, ok := poll.(VoteGenerator)
+	if !ok {
+		return nil, NewPollTypeError("can only generate a poll for polls that implement VoteGenerator, got type %s",
+			reflect.TypeOf(poll))
+	}
+
+	switch policy {
+	case AddAsAyeEmptyVote:
+		return asGenerator.GenerateVoteFromBasicAnswer(voter, Aye)
+	case AddAsNoEmptyVote:
+		return asGenerator.GenerateVoteFromBasicAnswer(voter, No)
+	case AddAsAbstentionEmptyVote:
+		return asGenerator.GenerateVoteFromBasicAnswer(voter, Abstention)
+	default:
+		return nil, NewPollTypeError("invalid policy %d, can't generate vote for this policy",
+			policy)
+	}
+
 }
 
 // idea: first convert skeleton to polls, then create parsers, then this method
