@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 )
 
 // AbstractVote describes an abstract vote (usually each poll has one vote type).
@@ -38,6 +39,7 @@ const (
 // VoteParser parses a vote from a string.
 //
 // Returned errors should be an internal error type like PollingSyntaxError or PollingSemanticError.
+// If the error is not nil the returned vote is not allowed to be nil
 //
 // It is recommended to also implement ParserCustomizer.
 type VoteParser interface {
@@ -461,6 +463,16 @@ const (
 	AddAsAbstentionEmptyVote
 )
 
+// GeneratePoliciesList is just a small helper function that returns a list of num elements, each entry is
+// set to the given policy.
+func GeneratePoliciesList(policy EmptyVotePolicy, num int) []EmptyVotePolicy {
+	res := make([]EmptyVotePolicy, num)
+	for i := 0; i < num; i++ {
+		res[i] = policy
+	}
+	return res
+}
+
 // GenerateEmptyVoteForVoter can be called to generate a vote for a poll if the input was empty.
 // By empty we mean that the voter simple didn't cast a vote.
 // If this method is called it will chose the action depending on the policy.
@@ -504,13 +516,74 @@ func (policy EmptyVotePolicy) GenerateEmptyVoteForVoter(voter *Voter, poll Abstr
 	}
 }
 
-func (m *VotersMatrix) generateVotesForPoll(poll AbstractPoll, parser VoteParser, policy EmptyVotePolicy) (AbstractVote, error) {
-	return nil, nil
+func (m *VotersMatrix) generateSingleVote(poll AbstractPoll, parser VoteParser, policy EmptyVotePolicy, voter *Voter, s string) (AbstractVote, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return policy.GenerateEmptyVoteForVoter(voter, poll)
+	}
+	// not empty, so take the parser
+	return parser.ParseFromString(s, voter)
+}
+
+func (m *VotersMatrix) generateVotesForPoll(columnIndex int, poll AbstractPoll, parser VoteParser, policy EmptyVotePolicy) error {
+	// iterate over all voters and generate the vote
+	// this could be nil due to the policy, in which case it should be ignored
+	for i, voter := range m.Voters {
+		voteString := m.MatrixBody[i][columnIndex]
+		vote, voteErr := m.generateSingleVote(poll, parser, policy, voter, voteString)
+		if voteErr != nil {
+			return voteErr
+		}
+		if vote != nil {
+			// add to poll
+			if addErr := poll.AddVote(vote); addErr != nil {
+				return addErr
+			}
+		}
+	}
+	return nil
+}
+
+func (m *VotersMatrix) fillAllPolls(polls []AbstractPoll, parsers []VoteParser, policies []EmptyVotePolicy) error {
+	// internal struct used in a channel
+	type pollParseRes struct {
+		pollIndex int
+		err       error
+	}
+
+	// channel for communication
+	ch := make(chan pollParseRes, 1)
+
+	// parse all votes for all polls concurrently with generateVotesForPoll
+	for i, p := range polls {
+		go func(index int, poll AbstractPoll) {
+			// index + 1 because the first column always contains the voter names
+			colErr := m.generateVotesForPoll(index+1, poll, parsers[index], policies[index])
+			ch <- pollParseRes{
+				pollIndex: index,
+				err:       colErr,
+			}
+		}(i, p)
+	}
+
+	// we capture the error in the smallest column and return it
+	var err error
+	smallestPollIndex := -1
+
+	for i := 0; i < len(polls); i++ {
+		colRes := <-ch
+		if colRes.err != nil && (smallestPollIndex < 0 || colRes.pollIndex < smallestPollIndex) {
+			err = colRes.err
+			smallestPollIndex = colRes.pollIndex
+		}
+	}
+
+	return err
 }
 
 // idea: first convert skeleton to polls, then create parsers, then this method
 // before: validate
-func (m *VotersMatrix) DefaultFillWithVotes(polls []AbstractPoll, parsers []VoteParser, policies []EmptyVotePolicy) error {
+func (m *VotersMatrix) FillVotesFromMatrix(polls []AbstractPoll, parsers []VoteParser, policies []EmptyVotePolicy) error {
 	numPolls := len(m.Polls)
 
 	if numPolls != len(polls) {
@@ -531,5 +604,6 @@ func (m *VotersMatrix) DefaultFillWithVotes(polls []AbstractPoll, parsers []Vote
 			numPolls, len(policies))
 	}
 
-	return nil
+	// now insert
+	return m.fillAllPolls(polls, parsers, policies)
 }

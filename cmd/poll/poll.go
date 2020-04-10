@@ -371,7 +371,17 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(parsersErr)
 	}
 
-	fmt.Println(parsers, handler.Filename)
+	// parsers are of type ParserCustomizer, we need type VoteParser (this is actually a sub type)
+	parsersCasted := make([]gopolls.VoteParser, len(parsers))
+
+	// now add all votes
+	policies := gopolls.GeneratePoliciesList(gopolls.IgnoreEmptyVote, len(polls))
+	votesErr := matrix.FillVotesFromMatrix(polls, parsersCasted, policies)
+	if votesErr != nil {
+		return render(votesErr)
+	}
+
+	fmt.Println(polls, handler.Filename)
 	return newHandlerRes(http.StatusOK, nil)
 
 }
