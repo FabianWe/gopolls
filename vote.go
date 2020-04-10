@@ -62,8 +62,9 @@ type ParserCustomizer interface {
 	CustomizeForPoll(poll AbstractPoll) (ParserCustomizer, error)
 }
 
-// TODO from here on: refactor and remove the type checks!
-var DefaultParserTemplateMap map[string]ParserCustomizer = make(map[string]ParserCustomizer, 5)
+// DefaultParserTemplateMap contains default templates for BasicPollType, MedianPollType and SchulzePollType.
+// Of course it could be extended by other init functions.
+var DefaultParserTemplateMap map[string]ParserCustomizer = make(map[string]ParserCustomizer, 3)
 
 // init adds default templates
 func init() {
