@@ -64,7 +64,7 @@ type ParserCustomizer interface {
 
 // DefaultParserTemplateMap contains default templates for BasicPollType, MedianPollType and SchulzePollType.
 // Of course it could be extended by other init functions.
-var DefaultParserTemplateMap map[string]ParserCustomizer = make(map[string]ParserCustomizer, 3)
+var DefaultParserTemplateMap = make(map[string]ParserCustomizer, 3)
 
 // init adds default templates
 func init() {
@@ -91,15 +91,15 @@ func init() {
 func CustomizeParsers(polls []AbstractPoll, templates map[string]ParserCustomizer) ([]ParserCustomizer, error) {
 	res := make([]ParserCustomizer, len(polls))
 	for i, poll := range polls {
-		// get the template
-		template, hasTemplate := templates[poll.PollType()]
+		// get the parserTemplate
+		parserTemplate, hasTemplate := templates[poll.PollType()]
 		if !hasTemplate {
 			return nil,
-				NewPollTypeError("no matching parser template for type %s (name %s) found",
+				NewPollTypeError("no matching parser parserTemplate for type %s (name %s) found",
 					reflect.TypeOf(poll), poll.PollType())
 		}
 		// try to customize
-		customized, customizeErr := template.CustomizeForPoll(poll)
+		customized, customizeErr := parserTemplate.CustomizeForPoll(poll)
 		if customizeErr != nil {
 			return nil, customizeErr
 		}
