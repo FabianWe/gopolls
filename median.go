@@ -310,6 +310,7 @@ func (result *MedianResult) GetVotersForValue(referenceValue MedianUnit) []*Vote
 // Majority can be set to the majority that the result requires. It defaults to the sum of all voter weights divided
 // by two if set to NoWeight.
 // It wins the highest value that can accumulate a weight > (strictly!) majority.
+// For computing majorities see ComputeMajority.
 //
 // An example: If there are 10 voters, each with weight one, the highest value that reaches > 5 (meaning at least 6)
 // votes wins.
@@ -326,7 +327,7 @@ func (poll *MedianPoll) Tally(majority Weight) *MedianResult {
 	weightSum := poll.WeightSum()
 
 	if majority == NoWeight {
-		majority = weightSum / 2
+		majority = ComputeMajority(FiftyPercentMajority, weightSum)
 	}
 	res := NewMedianResult()
 	res.WeightSum = weightSum
