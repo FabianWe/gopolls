@@ -226,6 +226,17 @@ func (poll *BasicPoll) PollType() string {
 	return BasicPollType
 }
 
+// AddVote adds a vote to the poll, the vote must be of type *BasicVote.
+func (poll *BasicPoll) AddVote(vote AbstractVote) error {
+	asBasicVote, ok := vote.(*BasicVote)
+	if !ok {
+		return NewPollTypeError("can't add vote to BasicPoll, vote must be of type *BasicVote, got type %s",
+			reflect.TypeOf(vote))
+	}
+	poll.Votes = append(poll.Votes, asBasicVote)
+	return nil
+}
+
 // GenerateVoteFromBasicAnswer implements VoteGenerator and returns a BasicVote.
 func (poll *BasicPoll) GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error) {
 	switch answer {

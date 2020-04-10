@@ -172,6 +172,17 @@ func (poll *MedianPoll) PollType() string {
 	return MedianPollType
 }
 
+// AddVote adds a vote to the poll, the vote must be of type *MedianVote.
+func (poll *MedianPoll) AddVote(vote AbstractVote) error {
+	asMedianVote, ok := vote.(*MedianVote)
+	if !ok {
+		return NewPollTypeError("can't add vote to MedianPoll, vote must be of type *MedianVote, got type %s",
+			reflect.TypeOf(vote))
+	}
+	poll.Votes = append(poll.Votes, asMedianVote)
+	return nil
+}
+
 // GenerateVoteFromBasicAnswer implements VoteGenerator and returns a MedianVote.
 //
 // Abstention is not an allowed value here!

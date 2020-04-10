@@ -20,15 +20,21 @@ import (
 )
 
 // AbstractPoll describes any poll.
-// It has only one method PollType which returns the type as a string.
-// Most operations dealing with polls do type assertions / switches are operate depending on the string of PolLType().
+// It has a method PollType which returns the type as a string.
+// Most operations dealing with polls do type assertions / switches are operate depending on the string of PollType().
 //
 // Constants are defined for implemented poll types: MedianPollType, SchulzePollType and BasicPollType.
+//
+// The method AddVote should add a would to the poll and return an error if the type is not supported
+// (of type PollError).
+// This method is not allowed to be called concurrently by multiple goroutines for the same poll
+// instance.
 //
 // It is also recommended to implement the VoteGenerator interface to create votes for Aye, No and Abstention
 // for a given poll.
 type AbstractPoll interface {
 	PollType() string
+	AddVote(vote AbstractVote) error
 }
 
 const (

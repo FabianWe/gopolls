@@ -236,6 +236,17 @@ func (poll *SchulzePoll) PollType() string {
 	return SchulzePollType
 }
 
+// AddVote adds a vote to the poll, the vote must be of type *SchulzeVote.
+func (poll *SchulzePoll) AddVote(vote AbstractVote) error {
+	asSchulzeVote, ok := vote.(*SchulzeVote)
+	if !ok {
+		return NewPollTypeError("can't add vote to SchulzePoll, vote must be of type *SchulzeVote, got type %s",
+			reflect.TypeOf(vote))
+	}
+	poll.Votes = append(poll.Votes, asSchulzeVote)
+	return nil
+}
+
 // GenerateVoteFromBasicAnswer implements VoteGenerator and returns a SchulzeVote.
 //
 // It will return [0, 0, ..., 1] for Aye, [1, 1, ..., 0] for No and [0, 0, ..., 0] for Abstention.
