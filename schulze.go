@@ -16,6 +16,7 @@ package gopolls
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,6 +145,8 @@ func NewSchulzeVote(voter *Voter, ranking SchulzeRanking) *SchulzeVote {
 //
 // It allows to set the length that is expected from the ranking string. If the string describes a ranking
 // not equal to length an error is returned.
+//
+// It also implements ParserCustomizer.
 type SchulzeVoteParser struct {
 	Length int
 }
@@ -159,6 +162,16 @@ func NewSchuleVoteParser(length int) *SchulzeVoteParser {
 // WithLength returns a shallow copy of the parser with only length set to the new value.
 func (parser *SchulzeVoteParser) WithLength(length int) *SchulzeVoteParser {
 	return &SchulzeVoteParser{Length: length}
+}
+
+// CustomizeForPoll implements ParserCustomizer and returns a new parser with Length set if a
+// *SchulzePoll is given.
+func (parser *SchulzeVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCustomizer, error) {
+	if asSchulzePoll, ok := poll.(*SchulzePoll); ok {
+		return parser.WithLength(asSchulzePoll.NumOptions), nil
+	}
+	return nil, NewPollTypeError("can't customize SchulzeVoteParser for type %s, expected type *SchulzePoll",
+		reflect.TypeOf(poll))
 }
 
 // ParseFromString implements the VoteParser interface, for details see type description.

@@ -38,9 +38,31 @@ const (
 // VoteParser parses a vote from a string.
 //
 // Returned errors should be an internal error type like PollingSyntaxError or PollingSemanticError.
+//
+// It is recommended to also implement ParserCustomizer.
 type VoteParser interface {
 	ParseFromString(s string, voter *Voter) (AbstractVote, error)
 }
+
+// ParserCustomizer is a parser that allows customization based on a poll.
+//
+// For example a median poll can be customized by setting a max value, that is the maximal value this parser will parse.
+// The workflow then is this: Create a parser "template" with the default options you want to use and then customize
+// it for each poll with CustomizeForPoll.
+//
+// In the median example: The template consists of a parser that allows all valid numbers / integers.
+// It is then customized for a certain poll by setting the max value of that poll.
+//
+// The CustomizeForPoll method should return the customized parser, if poll is of the wrong type or the operation is
+// in some way not allowed a PollTypeError should be returned.
+//
+// All parsers from this package also implement this interface.
+type ParserCustomizer interface {
+	VoteParser
+	CustomizeForPoll(poll AbstractPoll) (ParserCustomizer, error)
+}
+
+// TODO from here on: refactor and remove the type checks!
 
 // ParserGenerationError is an error that is returned if no parser could be created for a skeleton.
 //

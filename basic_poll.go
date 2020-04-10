@@ -16,6 +16,7 @@ package gopolls
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -87,6 +88,8 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 //
 // Because this style might be confusing for people not familiar with the Schulze method the acceptance of the ranking
 // style can be disabled with AllowRankingStyle = false.
+//
+// It also implements ParserCustomizer.
 type BasicVoteParser struct {
 	NoValues          []string
 	AyeValues         []string
@@ -106,6 +109,17 @@ func NewBasicVoteParser() *BasicVoteParser {
 		AbstentionValues:  abstentionDefaults,
 		AllowRankingStyle: true,
 	}
+}
+
+// CustomizeForPoll implements ParserCustomizer and returns just the same parser again
+// if a *BasicPoll is given.
+func (parser *BasicVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCustomizer, error) {
+	if _, ok := poll.(*BasicPoll); ok {
+		// is a valid basic poll, nothing there to be done
+		return parser, nil
+	}
+	return nil, NewPollTypeError("can't customize BasicVoteParser for type %s, expected type *BasicPoll",
+		reflect.TypeOf(poll))
 }
 
 func (parser *BasicVoteParser) containsString(candidates []string, s string) bool {

@@ -16,6 +16,7 @@ package gopolls
 
 import (
 	"math"
+	"reflect"
 	"sort"
 	"strconv"
 )
@@ -76,6 +77,8 @@ type MedianVoteParser struct {
 //
 // The maxValue is set to NoMedianUnitValue, meaning that it is disabled and doesn't check for a max value.
 // To enable it use WithMaxValue.
+//
+// It also implements ParserCustomizer.
 func NewMedianVoteParser(currencyParser CurrencyParser) *MedianVoteParser {
 	return &MedianVoteParser{
 		parser:   currencyParser,
@@ -84,11 +87,21 @@ func NewMedianVoteParser(currencyParser CurrencyParser) *MedianVoteParser {
 }
 
 // WithMaxValue returns a shallow copy of the parser with only maxValue set to the new value.
-func (parser MedianVoteParser) WithMaxValue(maxValue MedianUnit) *MedianVoteParser {
+func (parser *MedianVoteParser) WithMaxValue(maxValue MedianUnit) *MedianVoteParser {
 	return &MedianVoteParser{
 		parser:   parser.parser,
 		maxValue: maxValue,
 	}
+}
+
+// CustomizeForPoll implements ParserCustomizer and returns a new parser with maxValue set if a
+// if a *MedianPoll is given.
+func (parser *MedianVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCustomizer, error) {
+	if asMedianPoll, ok := poll.(*MedianPoll); ok {
+		return parser.WithMaxValue(asMedianPoll.Value), nil
+	}
+	return nil, NewPollTypeError("can't customize MedianVoteParser for type %s, expected type *MedianPoll",
+		reflect.TypeOf(poll))
 }
 
 // ParseFromString implements the VoteParser interface, for details see type description.
