@@ -381,8 +381,12 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(votesErr)
 	}
 
-	fmt.Println(polls, handler.Filename)
-	return newHandlerRes(http.StatusOK, nil)
+	// evaluate all polls
+	tallied := evaluatePolls(polls)
+
+	renderContext.AdditionalData["source_file_name"] = handler.Filename
+	renderContext.AdditionalData["evaluation"] = tallied
+	return executeTemplate(h.evaluationResultsTemplate, renderContext, buff)
 
 }
 
@@ -403,6 +407,46 @@ func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffe
 	res := newHandlerRes(http.StatusOK, nil)
 	res.ContentType = "text/csv"
 	res.FileName = "votes.csv"
+	return res
+}
+
+func evaluatePolls(polls []gopolls.AbstractPoll) []interface{} {
+	res := make([]interface{}, len(polls))
+
+	// type used for the channel to communicate
+	type pollRes struct {
+		index int
+		res   interface{}
+	}
+
+	ch := make(chan pollRes, 1)
+
+	// evaluate each poll
+	for i, p := range polls {
+		go func(index int, poll gopolls.AbstractPoll) {
+			var evaluated interface{}
+			switch typedPoll := poll.(type) {
+			case *gopolls.BasicPoll:
+				evaluated = typedPoll.Tally()
+			case *gopolls.MedianPoll:
+				evaluated = typedPoll.Tally(gopolls.NoWeight)
+			case *gopolls.SchulzePoll:
+				evaluated = typedPoll.Tally()
+			default:
+				panic(fmt.Sprintf("Unsupported poll type %s", reflect.TypeOf(poll)))
+			}
+			ch <- pollRes{
+				index: index,
+				res:   evaluated,
+			}
+		}(i, p)
+	}
+
+	for i := 0; i < len(polls); i++ {
+		pollRes := <-ch
+		res[pollRes.index] = pollRes.res
+	}
+
 	return res
 }
 

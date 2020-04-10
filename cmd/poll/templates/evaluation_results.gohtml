@@ -14,8 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */ -}}
 
+{{block "basic_poll" .}}
+
+{{end}}
+
 {{block "content" .}}
     <h2 class="content-subhead">Evaluation Results</h2>
 
+    Displaying results! Yeah! File is {{.AdditionalData.source_file_name}}
 
 {{end}}
