@@ -273,6 +273,8 @@ func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err err
 // also set the string entries of the matrix (MatrixHead and MatrixBody).
 // Then call VerifyAndFill to verify the input and set the Voters and Polls slices in the matrix.
 //
+// All other methods usually assume that the matrix is correct and the described properties hold.
+//
 // See NewVotersMatrixFromCSV for an example.
 type VotersMatrix struct {
 	Voters      []*Voter
@@ -432,39 +434,32 @@ func (m *VotersMatrix) verifyAndFillPolls() error {
 	return nil
 }
 
-//
-//type EmptyVotePolicy int8
-//
-//const (
-//	IgnoreEmptyVote EmptyVotePolicy = iota
-//	RaiseErrorEmptyVote
-//	AddAsAyeEmptyVote
-//	AddAsNoEmptyVote
-//	AddAsAbstentionEmptyVote
-//)
-//
-//// vote can be nil!
-//func (m *VotersMatrix) generateVotesForPoll(poll AbstractPoll, parser VoteParser) ([]AbstractVote, error) {
-//	n := 0
-//	// iterate over all voters and try to parse vote
-//	res := make([]AbstractVote, n)
-//
-//	return res, nil
-//}
-//
-//// idea: first convert skeleton to polls, then create parsers, then this method
-//// before: validate
-//func (m *VotersMatrix) DefaultFillWithVotes(pollsList []AbstractPoll, parsers []VoteParser) error {
-//	if len(pollsList) != len(parsers) {
-//		return NewPollingSemanticError(nil,
-//			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
-//			len(pollsList), len(parsers))
-//	}
-//	if numPolls := m.Polls.NumSkeletons(); numPolls != len(parsers) {
-//		return NewPollingSemanticError(nil,
-//			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
-//			numPolls, len(parsers))
-//	}
-//
-//	return nil
-//}
+type EmptyVotePolicy int8
+
+const (
+	IgnoreEmptyVote EmptyVotePolicy = iota
+	RaiseErrorEmptyVote
+	AddAsAyeEmptyVote
+	AddAsNoEmptyVote
+	AddAsAbstentionEmptyVote
+)
+
+// VoteGenerator is used to describe polls that can produce a poll specific type for a
+// basic answer (yes, no or abstention).
+// It should return a PollTypeError if an answer is not supported (or not at all).
+// All polls implemented at the moment implement this interface.
+type VoteGenerator interface {
+	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
+}
+
+// idea: first convert skeleton to polls, then create parsers, then this method
+// before: validate
+func (m *VotersMatrix) DefaultFillWithVotes(parsers []VoteParser) error {
+	if numPolls := len(m.Polls); numPolls != len(parsers) {
+		return NewPollingSemanticError(nil,
+			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
+			numPolls, len(parsers))
+	}
+
+	return nil
+}

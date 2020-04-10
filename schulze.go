@@ -68,6 +68,38 @@ func NewSchulzeRanking() SchulzeRanking {
 	return make(SchulzeRanking, 0)
 }
 
+// NewSchulzeAbstention returns a Schulze ranking that describes an abstention, i.e. a ranking of size numOptions
+// with all values set to 0.
+func NewSchulzeAbstention(numOptions int) SchulzeRanking {
+	return make(SchulzeRanking, numOptions)
+}
+
+// NewSchulzeNo returns a new Schulze ranking that can be thought of as a vote for "no", meaning against all options.
+// In this case it is assumed that the last option stands for no.
+// Thus the ranking returned is [1, 1, ..., 0].
+func NewSchulzeNo(numOptions int) SchulzeRanking {
+	res := make(SchulzeRanking, numOptions)
+	for i := 0; i < numOptions-1; i++ {
+		res[i] = 1
+	}
+	return res
+}
+
+// NewSchulzeAye returns a new Schulze ranking that can be thought of as a vote for "aye" / "yes",
+// meaning for every option with the same weight, except no.
+// Thus the ranking returned is [0, 0, ...,1].
+func NewSchulzeAye(numOptions int) SchulzeRanking {
+	res := make(SchulzeRanking, numOptions)
+
+	noPos := numOptions - 1
+	// this should always be true, just to be sure
+	if noPos >= 0 {
+		res[noPos] = 1
+	}
+
+	return res
+}
+
 // private because from outside the parser implementing the parser interface should be used
 func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 	split := strings.FieldsFunc(s, func(r rune) bool {
@@ -165,6 +197,8 @@ type SchulzeWinsList [][]int
 //
 // The implementation was inspired by the German Wikipedia article (https://de.wikipedia.org/wiki/Schulze-Methode)
 // and https://github.com/mgp/schulze-method.
+//
+// This type also implements VoteGenerator.
 type SchulzePoll struct {
 	NumOptions int
 	Votes      []*SchulzeVote
@@ -187,6 +221,22 @@ func NewSchulzePoll(numOptions int, votes []*SchulzeVote) *SchulzePoll {
 // PollType returns the constant SchulzePollType.
 func (poll *SchulzePoll) PollType() string {
 	return SchulzePollType
+}
+
+// GenerateVoteFromBasicAnswer implements VoteGenerator and returns a SchulzeVote.
+//
+// It will return [0, 0, ..., 1] for Aye, [1, 1, ..., 0] for No and [0, 0, ..., 0] for Abstention.
+func (poll *SchulzePoll) GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error) {
+	switch answer {
+	case No:
+		return NewSchulzeVote(voter, NewSchulzeNo(poll.NumOptions)), nil
+	case Aye:
+		return NewSchulzeVote(voter, NewSchulzeAye(poll.NumOptions)), nil
+	case Abstention:
+		return NewSchulzeVote(voter, NewSchulzeAbstention(poll.NumOptions)), nil
+	default:
+		return nil, NewPollTypeError("invalid poll answer %d", answer)
+	}
 }
 
 // TruncateVoters removes all voters that have a ranking with length != poll.NumOptions.

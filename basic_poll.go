@@ -86,7 +86,7 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 // Aye if a < b, No if b < a and Abstention if a = b.
 //
 // Because this style might be confusing for people not familiar with the Schulze method the acceptance of the ranking
-// style can be disabled with AllowRankingStyle = false,
+// style can be disabled with AllowRankingStyle = false.
 type BasicVoteParser struct {
 	NoValues          []string
 	AyeValues         []string
@@ -196,6 +196,8 @@ func (vote *BasicVote) VoteType() string {
 
 // BasicPoll is a poll with the options No, Yes and Abstention, for details see BasicPollAnswer.
 // It implements the interface AbstractPoll.
+//
+// This type also implements VoteGenerator.
 type BasicPoll struct {
 	Votes []*BasicVote
 }
@@ -208,6 +210,20 @@ func NewBasicPoll(votes []*BasicVote) *BasicPoll {
 // PollType returns the constant BasicPollType.
 func (poll *BasicPoll) PollType() string {
 	return BasicPollType
+}
+
+// GenerateVoteFromBasicAnswer implements VoteGenerator and returns a BasicVote.
+func (poll *BasicPoll) GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error) {
+	switch answer {
+	case No:
+		return NewBasicVote(voter, No), nil
+	case Aye:
+		return NewBasicVote(voter, Aye), nil
+	case Abstention:
+		return NewBasicVote(voter, Abstention), nil
+	default:
+		return nil, NewPollTypeError("invalid poll answer %d", answer)
+	}
 }
 
 // TruncateVoters is one of the truncate methods that exist for nearly every poll (really for everyone implemented

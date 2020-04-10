@@ -136,6 +136,8 @@ func (vote *MedianVote) VoteType() string {
 // You can set Sorted to true if you have already sorted them (for example in a database query).
 // The SortVotes method will in-place sort the Votes, thus changing the original slice.
 // The Tally method always calls AssureSorted.
+//
+// This type also implements VoteGenerator.
 type MedianPoll struct {
 	Value  MedianUnit
 	Votes  []*MedianVote
@@ -155,6 +157,23 @@ func NewMedianPoll(value MedianUnit, votes []*MedianVote) *MedianPoll {
 // PollType returns the constant MedianPollType.
 func (poll *MedianPoll) PollType() string {
 	return MedianPollType
+}
+
+// GenerateVoteFromBasicAnswer implements VoteGenerator and returns a MedianVote.
+//
+// Abstention is not an allowed value here!
+// It will return a vote for 0 for No, a vote for poll.Value for Yes.
+func (poll *MedianPoll) GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error) {
+	switch answer {
+	case No:
+		return NewMedianVote(voter, 0), nil
+	case Aye:
+		return NewMedianVote(voter, poll.Value), nil
+	case Abstention:
+		return nil, NewPollTypeError("abstention is not supported for median polls")
+	default:
+		return nil, NewPollTypeError("invalid poll answer %d", answer)
+	}
 }
 
 // TruncateVoters identifies all votes that contain a value > poll.Value.

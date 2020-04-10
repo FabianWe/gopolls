@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,10 @@ type mainContext struct {
 	VotersSourceFileName string
 	// in case collection was loaded from a file this value is set to this path
 	CollectionSourceFileName string
+
+	// if you're reading this: don't do this in any live code, it's only here for this app, you would never do that
+	// because this is a small demonstration that should be used nowhere I think it will be fine
+	mutex sync.Mutex
 }
 
 type renderContext struct {
@@ -96,6 +101,9 @@ func toHandleFunc(h appHandler, context *mainContext) http.HandlerFunc {
 			reflect.TypeOf(h), r.URL)
 		var buff bytes.Buffer
 		start := time.Now()
+		// as mentioned before: never do things this way, just for the sake of this sample demo app
+		context.mutex.Lock()
+		defer context.mutex.Unlock()
 		handlerRes := h.Handle(context, &buff, r)
 		delta := time.Since(start)
 		log.Println("Handler done after", delta)
@@ -316,7 +324,14 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	renderContext := newRenderContext(context)
 
 	render := func(err error) handlerRes {
-		return executeTemplate(h.template, renderContext, buff)
+		if err == nil {
+			return executeTemplate(h.template, renderContext, buff)
+		}
+		if errors.Is(err, gopolls.ErrPoll) {
+			renderContext.AdditionalData["error"] = err
+			return executeTemplate(h.template, renderContext, buff)
+		}
+		return newHandlerRes(http.StatusInternalServerError, err)
 	}
 
 	if r.Method == http.MethodGet {
@@ -343,8 +358,20 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(matrixErr)
 	}
 
-	fmt.Println(matrix, handler.Filename)
+	// matrix has been parsed, so now try to parse the votes from it
+	polls, pollsErr := gopolls.ConvertSkeletonsToPolls(matrix.Polls,
+		gopolls.DefaultSkeletonConverter)
+	if pollsErr != nil {
+		return render(pollsErr)
+	}
 
+	// next try to parse the results, first generate the parsers
+	parsers, parsersErr := gopolls.GenerateDefaultParsers(polls, nil, nil, nil)
+	if parsersErr != nil {
+		return render(parsersErr)
+	}
+
+	fmt.Println(parsers, handler.Filename)
 	return newHandlerRes(http.StatusOK, nil)
 
 }

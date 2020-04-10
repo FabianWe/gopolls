@@ -20,8 +20,8 @@ import (
 
 // Voter implements everyone who is allowed to participate in polls.
 //
-// A voter has a name and weight. The weight specifies how much the count of a certain voter counts
-// (in normal "elections" this is 1).
+// A voter has a name and weight. The weight specifies how much the vote of a certain voter counts (in "normal
+//elections" this is 1).
 type Voter struct {
 	Name   string
 	Weight Weight
