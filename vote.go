@@ -63,84 +63,47 @@ type ParserCustomizer interface {
 }
 
 // TODO from here on: refactor and remove the type checks!
+var DefaultParserTemplateMap map[string]ParserCustomizer = make(map[string]ParserCustomizer, 5)
 
-// ParserGenerationError is an error that is returned if no parser could be created for a skeleton.
-//
-// Usually a skeleton "implies" a parser, for example sets the number of expected options or a maximal value
-// on a parser.
-// This error is used to signal that no parser could be created for a skeleton / description.
-type ParserGenerationError struct {
-	PollError
-	Msg string
+// init adds default templates
+func init() {
+	DefaultParserTemplateMap[BasicPollType] = NewBasicVoteParser()
+	DefaultParserTemplateMap[MedianPollType] = NewMedianVoteParser(DefaultCurrencyHandler)
+	DefaultParserTemplateMap[SchulzePollType] = NewSchuleVoteParser(-1)
 }
 
-// NewParserGenerationError returns a new ParserGenerationError.
+// CustomizeParsers customizes all polls with a given template.
 //
-// The error message can be formatted like in fmt.Sprintf().
-func NewParserGenerationError(msg string, a ...interface{}) ParserGenerationError {
-	return ParserGenerationError{
-		Msg: fmt.Sprintf(msg, a...),
-	}
-}
-
-func (err ParserGenerationError) Error() string {
-	return err.Msg
-}
-
-// GenerateDefaultParsers creates the parser for a list of polls.
+// As discussed in the documentation for ParserCustomizer each parser can be customized for a specific poll.
+// This method will apply CustomizeForPoll on a list of polls.
 //
-// Usually a skeleton "implies" a parser, for example sets the number of expected options or a maximal value
-// on a parser.
-// Thus each skeleton defines its own parser instance.
-// This method creates such parsers.
+// The templates map must have an entry for each poll type string.
+// For example a BasicPoll returns BasicPollType in PollType(). This string must be mapped to a ParserCustomizer
+// that works as the template for all BasicPolls.
 //
-// This is a method that is rather tailored for my use case, but it should give you a general idea
-// how to parse votes.
+// DefaultParserTemplateMap contains some default templates for BasicPollType, MedianPollType and SchulzePollType.
 //
-// The templates (like basicPollTemplate) are the parsers that are used to create new parsers from.
-// For example the NewMedianVoteParser has a method WithMaxValue. We use the provided parser template
-// and call WithMaxValue for a MedianPoll.
+// Of course there are other ways to do the conversion, but this is a nice helper function.
 //
-// All parsers can be nil in which case they default to:
-// basicPollTemplate ==> NewBasicVoteParser()
-// medianPollTemplate ==> NewMedianVoteParser(DefaultCurrencyHandler)
-// schulzePollTemplate ==> NewSchuleVoteParser(-1)
-//
-// By providing other defaults you can overwrite the parser behavior.
-//
-// It returns a ParserGenerationError if the poll is not supported (BasicPoll, MedianPoll or SchulzePoll)..
-func GenerateDefaultParsers(polls []AbstractPoll,
-	basicPollTemplate *BasicVoteParser,
-	medianPollTemplate *MedianVoteParser,
-	schulzePollTemplate *SchulzeVoteParser,
-) ([]VoteParser, error) {
-	// set templates to defaults if nil
-	if basicPollTemplate == nil {
-		basicPollTemplate = NewBasicVoteParser()
-	}
-	if medianPollTemplate == nil {
-		medianPollTemplate = NewMedianVoteParser(DefaultCurrencyHandler)
-	}
-	if schulzePollTemplate == nil {
-		schulzePollTemplate = NewSchuleVoteParser(-1)
-	}
-	res := make([]VoteParser, len(polls))
-
+// It returns a PollTypeError if a template is not found in templates and returns any error from calls to
+// CustomizeForPoll.
+func CustomizeParsers(polls []AbstractPoll, templates map[string]ParserCustomizer) ([]ParserCustomizer, error) {
+	res := make([]ParserCustomizer, len(polls))
 	for i, poll := range polls {
-		var parser VoteParser
-		switch typedPoll := poll.(type) {
-		case *BasicPoll:
-			parser = basicPollTemplate
-		case *MedianPoll:
-			parser = medianPollTemplate.WithMaxValue(typedPoll.Value)
-		case *SchulzePoll:
-			parser = schulzePollTemplate.WithLength(typedPoll.NumOptions)
-		default:
-			return nil, NewParserGenerationError("unsupported poll of type %s", reflect.TypeOf(poll))
+		// get the template
+		template, hasTemplate := templates[poll.PollType()]
+		if !hasTemplate {
+			return nil,
+				NewPollTypeError("no matching parser template for type %s (name %s) found",
+					reflect.TypeOf(poll), poll.PollType())
 		}
-		res[i] = parser
+		// try to customize
+		customized, customizeErr := template.CustomizeForPoll(poll)
+		if customizeErr != nil {
+			return nil, customizeErr
+		}
+		res[i] = customized
 	}
-
 	return res, nil
 }
 

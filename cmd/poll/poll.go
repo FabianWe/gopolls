@@ -366,7 +366,7 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	}
 
 	// next try to parse the results, first generate the parsers
-	parsers, parsersErr := gopolls.GenerateDefaultParsers(polls, nil, nil, nil)
+	parsers, parsersErr := gopolls.CustomizeParsers(polls, gopolls.DefaultParserTemplateMap)
 	if parsersErr != nil {
 		return render(parsersErr)
 	}
