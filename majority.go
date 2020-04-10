@@ -18,7 +18,7 @@ import "math/big"
 
 var (
 	FiftyPercentMajority = big.NewRat(1, 2)
-	TwoThirdsMajority = big.NewRat(2, 3)
+	TwoThirdsMajority    = big.NewRat(2, 3)
 )
 
 // ComputeMajority computes the required majority given the majority as a rational.
@@ -41,4 +41,19 @@ func ComputeMajority(majority *big.Rat, votesSum Weight) Weight {
 	asInt := div.Int64()
 	// majority <= 1 ==> should be possible to represent as uint32 (Weight)
 	return Weight(asInt)
+}
+
+func ComputePercentage(votes, votesSum Weight) *big.Rat {
+	if votesSum == 0 {
+		return big.NewRat(0, 1)
+	}
+	return big.NewRat(int64(votes), int64(votesSum))
+}
+
+var oneHundredRat = big.NewRat(100, 1)
+
+func FormatPercentage(percent *big.Rat) string {
+	p := new(big.Rat)
+	p.Mul(p, oneHundredRat)
+	return p.FloatString(3)
 }

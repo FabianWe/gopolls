@@ -141,6 +141,19 @@ func baseTemplates() *template.Template {
 		"formatCurrency": func(val gopolls.CurrencyValue) string {
 			return currencyHandler.Format(val)
 		},
+		// this function lets us print vote result strings more easily
+		// given two values of type Weight a and b it returns
+		// "a / b = <PERCENT>%" where PERCENT is the formatted string of (a / b) * 100 (precision is 3)
+		"voteResult": func(a, b gopolls.Weight) string {
+			percentage := gopolls.ComputePercentage(a, b)
+			percentageString := gopolls.FormatPercentage(percentage)
+			return fmt.Sprintf("%d / %d = %s%%", a, b, percentageString)
+		},
+		// similar to voteResult, but only shows the percentage part
+		"percentage": func(a, b gopolls.Weight) string {
+			percentage := gopolls.ComputePercentage(a, b)
+			return gopolls.FormatPercentage(percentage) + "%"
+		},
 	}
 
 	basePath := filepath.Join(templateRoot, "base.gohtml")

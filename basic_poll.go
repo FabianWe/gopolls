@@ -328,9 +328,12 @@ func (counter *BasicPollCounter) Equals(other *BasicPollCounter) bool {
 // of the weight of the voter.
 // WeightedVotes counts how often an answer was taken, by summing up not the number of voters but the weight of
 // these voters.
+//
+// VotesSum is the sum of the weights of all votes in the poll.
 type BasicPollResult struct {
 	NumberVoters  *BasicPollCounter
 	WeightedVotes *BasicPollCounter
+	VotesSum      Weight
 }
 
 // NewBasicPollResult returns a new BasicPollResult with all values set to 0.
@@ -338,12 +341,14 @@ func NewBasicPollResult() *BasicPollResult {
 	return &BasicPollResult{
 		NumberVoters:  NewBasicPollCounter(),
 		WeightedVotes: NewBasicPollCounter(),
+		VotesSum:      0,
 	}
 }
 
 func (res *BasicPollResult) increaseCounters(vote *BasicVote) {
 	res.NumberVoters.Increase(vote.Choice, 1)
 	res.WeightedVotes.Increase(vote.Choice, vote.Voter.Weight)
+	res.VotesSum += vote.Voter.Weight
 }
 
 // Tally counts how often a certain answer was taken.

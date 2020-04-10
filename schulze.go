@@ -297,11 +297,13 @@ func (poll *SchulzePoll) TruncateVoters() []*SchulzeVote {
 	return culprits
 }
 
-func (poll *SchulzePoll) computeD() SchulzeMatrix {
+func (poll *SchulzePoll) computeD() (SchulzeMatrix, Weight) {
 	n := poll.NumOptions
 	res := NewSchulzeMatrix(n)
+	var sum Weight
 
 	for _, vote := range poll.Votes {
+		sum += vote.Voter.Weight
 		w := vote.Voter.Weight
 		ranking := vote.Ranking
 		if len(ranking) != n {
@@ -318,7 +320,7 @@ func (poll *SchulzePoll) computeD() SchulzeMatrix {
 		}
 	}
 
-	return res
+	return res, sum
 }
 
 func (poll *SchulzePoll) computeP(d SchulzeMatrix) SchulzeMatrix {
@@ -386,17 +388,21 @@ func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 //
 // It stores (for testing and further investigation) the matrices d and p and of course the
 // sorted winning groups as a SchulzeWinsList.
+//
+// VotesSum is the sum of the weights of all votes in the poll.
 type SchulzeResult struct {
 	D, P         SchulzeMatrix
 	RankedGroups SchulzeWinsList
+	VotesSum     Weight
 }
 
 // NewSchulzeResult returns a new SchulzeResult.
-func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList) *SchulzeResult {
+func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList, votesSum Weight) *SchulzeResult {
 	return &SchulzeResult{
 		D:            d,
 		P:            p,
 		RankedGroups: rankedGroups,
+		VotesSum:     votesSum,
 	}
 }
 
@@ -405,8 +411,8 @@ func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList) *Schulze
 // Note that all voters with an invalid ranking (length is not poll.NumOptions) are silently discarded.
 // Use TruncateVoters before to find such votes.
 func (poll *SchulzePoll) Tally() *SchulzeResult {
-	d := poll.computeD()
+	d, votesSum := poll.computeD()
 	p := poll.computeP(d)
 	rankedGroups := poll.rankP(p)
-	return NewSchulzeResult(d, p, rankedGroups)
+	return NewSchulzeResult(d, p, rankedGroups, votesSum)
 }
