@@ -502,16 +502,33 @@ func (policy EmptyVotePolicy) GenerateEmptyVoteForVoter(voter *Voter, poll Abstr
 		return nil, NewPollTypeError("invalid policy %d, can't generate vote for this policy",
 			policy)
 	}
+}
 
+func (m *VotersMatrix) generateVotesForPoll(poll AbstractPoll, parser VoteParser, policy EmptyVotePolicy) (AbstractVote, error) {
+	return nil, nil
 }
 
 // idea: first convert skeleton to polls, then create parsers, then this method
 // before: validate
-func (m *VotersMatrix) DefaultFillWithVotes(parsers []VoteParser) error {
-	if numPolls := len(m.Polls); numPolls != len(parsers) {
+func (m *VotersMatrix) DefaultFillWithVotes(polls []AbstractPoll, parsers []VoteParser, policies []EmptyVotePolicy) error {
+	numPolls := len(m.Polls)
+
+	if numPolls != len(polls) {
 		return NewPollingSemanticError(nil,
-			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers",
+			"can't generate votes, expected %d polls (one for each skeleton), bug got %d polls instead",
+			numPolls, len(polls))
+	}
+
+	if numPolls != len(parsers) {
+		return NewPollingSemanticError(nil,
+			"can't generate votes, expected %d parsers (one for each poll), but got %d parsers instead",
 			numPolls, len(parsers))
+	}
+
+	if numPolls != len(policies) {
+		return NewPollingSemanticError(nil,
+			"can't generate votes, expected %d policies (one for each poll) but got %d policies instead",
+			numPolls, len(policies))
 	}
 
 	return nil
