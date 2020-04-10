@@ -28,7 +28,7 @@ type SchulzeMatrix [][]Weight
 
 // NewSchulzeMatrix returns a new matrix given the dimension, so the resulting matrix is of size n × n.
 func NewSchulzeMatrix(dimension int) SchulzeMatrix {
-	var res SchulzeMatrix = make(SchulzeMatrix, dimension)
+	res := make(SchulzeMatrix, dimension)
 	for i := 0; i < dimension; i++ {
 		res[i] = make([]Weight, dimension)
 	}
@@ -297,9 +297,10 @@ func (poll *SchulzePoll) TruncateVoters() []*SchulzeVote {
 	return culprits
 }
 
-func (poll *SchulzePoll) computeD() (SchulzeMatrix, Weight) {
+func (poll *SchulzePoll) computeD() (SchulzeMatrix, SchulzeMatrix, Weight) {
 	n := poll.NumOptions
 	res := NewSchulzeMatrix(n)
+	resNonStrict := NewSchulzeMatrix(n)
 	var sum Weight
 
 	for _, vote := range poll.Votes {
@@ -311,16 +312,22 @@ func (poll *SchulzePoll) computeD() (SchulzeMatrix, Weight) {
 		}
 		for i := 0; i < n; i++ {
 			for j := i + 1; j < n; j++ {
-				if ranking[i] < ranking[j] {
+				switch {
+				case ranking[i] < ranking[j]:
 					res[i][j] += w
-				} else if ranking[j] < ranking[i] {
+					resNonStrict[i][j] += w
+				case ranking[j] < ranking[i]:
 					res[j][i] += w
+					resNonStrict[j][i] += w
+				case ranking[i] == ranking[j]:
+					resNonStrict[i][j] += w
+					resNonStrict[j][i] += w
 				}
 			}
 		}
 	}
 
-	return res, sum
+	return res, resNonStrict, sum
 }
 
 func (poll *SchulzePoll) computeP(d SchulzeMatrix) SchulzeMatrix {
@@ -388,22 +395,71 @@ func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 //
 // It stores (for testing and further investigation) the matrices d and p and of course the
 // sorted winning groups as a SchulzeWinsList.
+// It also contains DNonStrict, which is exactly like the matrix d but instead of counting in d[i][j] how many voters
+// (or weights) strictly preferred i to j it counts how many voters preferred i to j or ranked them equally
+// (ranking[i] < ranking[j] vs ranking[i] <= ranking[j]).
 //
 // VotesSum is the sum of the weights of all votes in the poll.
 type SchulzeResult struct {
 	D, P         SchulzeMatrix
+	DNonStrict   SchulzeMatrix
 	RankedGroups SchulzeWinsList
 	VotesSum     Weight
 }
 
 // NewSchulzeResult returns a new SchulzeResult.
-func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList, votesSum Weight) *SchulzeResult {
+func NewSchulzeResult(d, dNonStrict, p SchulzeMatrix, rankedGroups SchulzeWinsList, votesSum Weight) *SchulzeResult {
 	return &SchulzeResult{
 		D:            d,
+		DNonStrict:   dNonStrict,
 		P:            p,
 		RankedGroups: rankedGroups,
 		VotesSum:     votesSum,
 	}
+}
+
+// StrictlyBetterThanNo returns a list of weights, each weight says how many voters (by weight) considered
+// the option strictly better than no.
+//
+// That is result[i] says: How many voters (by weight) have voted option strictly higher than no.
+// Higher means that the ranking position of i is smaller than the ranking position of no.
+//
+// It simply returns the last column of the matrix d, thus assumes that no is always the last option.
+// Note that due to this the last entry in the returned list will always be 0.
+func (schulzeRes *SchulzeResult) StrictlyBetterThanNo() []Weight {
+	n := len(schulzeRes.D)
+	if n == 0 {
+		return nil
+	}
+	res := make([]Weight, n)
+
+	for i := 0; i < n; i++ {
+		res[i] = schulzeRes.D[i][n-1]
+	}
+
+	return res
+}
+
+// BetterOrEqualNo returns a list of weights, each weight says how many voters (by weight) considered
+// the option equal or better than no.
+//
+// That is result[i] says: How many voters (by weight) have voted option higher or equal no.
+// Higher means that the ranking position of i is smaller than the ranking position of no.
+//
+// It simply returns the last column of the matrix d in non-strict mode, thus assumes that no is always the last option.
+// Note that due to this the last entry in the returned list will always be 0.
+func (schulzeRes *SchulzeResult) BetterOrEqualNo() []Weight {
+	n := len(schulzeRes.DNonStrict)
+	if n == 0 {
+		return nil
+	}
+	res := make([]Weight, n)
+
+	for i := 0; i < n; i++ {
+		res[i] = schulzeRes.DNonStrict[i][n-1]
+	}
+
+	return res
 }
 
 // Tally computes the result of a Schulze poll.
@@ -411,8 +467,8 @@ func NewSchulzeResult(d, p SchulzeMatrix, rankedGroups SchulzeWinsList, votesSum
 // Note that all voters with an invalid ranking (length is not poll.NumOptions) are silently discarded.
 // Use TruncateVoters before to find such votes.
 func (poll *SchulzePoll) Tally() *SchulzeResult {
-	d, votesSum := poll.computeD()
+	d, dNonStrict, votesSum := poll.computeD()
 	p := poll.computeP(d)
 	rankedGroups := poll.rankP(p)
-	return NewSchulzeResult(d, p, rankedGroups, votesSum)
+	return NewSchulzeResult(d, dNonStrict, p, rankedGroups, votesSum)
 }
