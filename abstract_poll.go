@@ -24,6 +24,9 @@ import (
 // Most operations dealing with polls do type assertions / switches are operate depending on the string of PolLType().
 //
 // Constants are defined for implemented poll types: MedianPollType, SchulzePollType and BasicPollType.
+//
+// It is also recommended to implement the VoteGenerator interface to create votes for Aye, No and Abstention
+// for a given poll.
 type AbstractPoll interface {
 	PollType() string
 }
