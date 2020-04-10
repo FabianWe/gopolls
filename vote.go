@@ -449,6 +449,7 @@ const (
 // It should return a PollTypeError if an answer is not supported (or not at all).
 // All polls implemented at the moment implement this interface.
 type VoteGenerator interface {
+	AbstractPoll
 	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
 }
 
