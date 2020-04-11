@@ -14,7 +14,9 @@
 
 package gopolls
 
-import "math/big"
+import (
+	"math/big"
+)
 
 var (
 	FiftyPercentMajority = big.NewRat(1, 2)
@@ -54,6 +56,6 @@ var oneHundredRat = big.NewRat(100, 1)
 
 func FormatPercentage(percent *big.Rat) string {
 	p := new(big.Rat)
-	p.Mul(p, oneHundredRat)
+	p.Mul(percent, oneHundredRat)
 	return p.FloatString(3)
 }

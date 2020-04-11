@@ -473,6 +473,11 @@ func GeneratePoliciesList(policy EmptyVotePolicy, num int) []EmptyVotePolicy {
 	return res
 }
 
+// ErrEmptyPollPolicy is an error used if a policy is set to RaiseErrorEmptyVote and an empty vote was found.
+// GenerateEmptyVoteForVoter will in this case return an error e s.t. errors.Is(e, ErrEmptyPollPolicy) returns true.
+// This should of course be checked before errors.Is(e, ErrPoll) because this is true for all internal errors.
+var ErrEmptyPollPolicy = NewPollTypeError("empty votes are not allowed")
+
 // GenerateEmptyVoteForVoter can be called to generate a vote for a poll if the input was empty.
 // By empty we mean that the voter simple didn't cast a vote.
 // If this method is called it will chose the action depending on the policy.
@@ -492,8 +497,8 @@ func (policy EmptyVotePolicy) GenerateEmptyVoteForVoter(voter *Voter, poll Abstr
 	case IgnoreEmptyVote:
 		return nil, nil
 	case RaiseErrorEmptyVote:
-		return nil, NewPollTypeError("empty vote is not allowed, but got an empty vote from voter \"%s\" for poll of type %s",
-			voter.Name, reflect.TypeOf(poll))
+		return nil, fmt.Errorf("voter \"%s\" and poll type \"%s\": %w",
+			voter.Name, reflect.TypeOf(poll), ErrEmptyPollPolicy)
 	}
 	// in all other cases it must be called with a VoteGenerator
 	// must be called with a VoteGenerator

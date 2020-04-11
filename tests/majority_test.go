@@ -45,3 +45,43 @@ func TestComputeMajority(t *testing.T) {
 		}
 	}
 }
+
+func TestComputePercentage(t *testing.T) {
+	tests := []struct {
+		votes, total gopolls.Weight
+		expected     *big.Rat
+	}{
+		{1, 1, big.NewRat(1, 1)},
+		{1, 2, big.NewRat(1, 2)},
+		{42, 0, big.NewRat(0, 1)},
+		{10, 20, big.NewRat(1, 2)},
+	}
+
+	for _, tc := range tests {
+		percentage := gopolls.ComputePercentage(tc.votes, tc.total)
+		if percentage.Cmp(tc.expected) != 0 {
+			t.Errorf("Expected percentage for input %d and %d to be %s, but got %s",
+				tc.votes, tc.total, tc.expected, percentage)
+		}
+	}
+}
+
+func TestFormatPercentage(t *testing.T) {
+	tests := []struct {
+		in       *big.Rat
+		expected string
+	}{
+		{big.NewRat(0, 1), "0.000"},
+		{big.NewRat(1, 2), "50.000"},
+		{big.NewRat(3, 10), "30.000"},
+		{big.NewRat(3, 4), "75.000"},
+		{big.NewRat(1, 3), "33.333"},
+	}
+	for _, tc := range tests {
+		got := gopolls.FormatPercentage(tc.in)
+		if got != tc.expected {
+			t.Errorf("Expected format of %s to be %s, but got %s instead",
+				tc.in, tc.expected, got)
+		}
+	}
+}
