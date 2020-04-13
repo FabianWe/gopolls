@@ -154,6 +154,20 @@ func baseTemplates() *template.Template {
 			percentage := gopolls.ComputePercentage(a, b)
 			return gopolls.FormatPercentage(percentage) + "%"
 		},
+		"dict": func(values ...interface{}) (map[string]interface{}, error) {
+			if len(values)%2 != 0 {
+				return nil, errors.New("invalid dict call")
+			}
+			dict := make(map[string]interface{}, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					return nil, errors.New("dict keys must be strings")
+				}
+				dict[key] = values[i+1]
+			}
+			return dict, nil
+		},
 	}
 
 	basePath := filepath.Join(templateRoot, "base.gohtml")
@@ -351,6 +365,10 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(nil)
 	}
 
+	if len(context.Voters) == 0 || context.PollCollection.NumSkeletons() == 0 {
+		// not really nice but well
+		return render(gopolls.NewPollingSemanticError(nil, "no voters / polls have been uploaded yet"))
+	}
 	// try to read the matrix
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		return newHandlerRes(http.StatusInternalServerError, err)
@@ -386,6 +404,9 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 
 	// parsers are of type ParserCustomizer, we need type VoteParser (this is actually a sub type)
 	parsersCasted := make([]gopolls.VoteParser, len(parsers))
+	for i, p := range parsers {
+		parsersCasted[i] = p
+	}
 
 	// now add all votes
 	policies := gopolls.GeneratePoliciesList(gopolls.IgnoreEmptyVote, len(polls))
@@ -395,12 +416,28 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	}
 
 	// evaluate all polls
-	tallied := evaluatePolls(polls)
+	tallied, evalErr := evaluatePolls(polls)
+	if evalErr != nil {
+		return render(evalErr)
+	}
 
 	renderContext.AdditionalData["source_file_name"] = handler.Filename
 	renderContext.AdditionalData["evaluation"] = tallied
+	renderContext.AdditionalData["title"] = context.PollCollection.Title
+	// prepare polls for nicer handling in templates, we group for each poll together:
+	// skeleton, poll, result
+	// we also create this by group
+	type templatePollEntry struct {
+		Skel   gopolls.AbstractPollSkeleton
+		Poll   gopolls.AbstractPoll
+		Result interface{}
+	}
+	type templateGroup struct {
+		Title string
+		Polls []templatePollEntry
+	}
+	// now use the original collection to
 	return executeTemplate(h.evaluationResultsTemplate, renderContext, buff)
-
 }
 
 type exportCSVTemplateHandler struct{}
@@ -423,13 +460,14 @@ func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffe
 	return res
 }
 
-func evaluatePolls(polls []gopolls.AbstractPoll) []interface{} {
+func evaluatePolls(polls []gopolls.AbstractPoll) ([]interface{}, error) {
 	res := make([]interface{}, len(polls))
 
 	// type used for the channel to communicate
 	type pollRes struct {
 		index int
 		res   interface{}
+		err   error
 	}
 
 	ch := make(chan pollRes, 1)
@@ -438,29 +476,53 @@ func evaluatePolls(polls []gopolls.AbstractPoll) []interface{} {
 	for i, p := range polls {
 		go func(index int, poll gopolls.AbstractPoll) {
 			var evaluated interface{}
+			var pollErr error
 			switch typedPoll := poll.(type) {
 			case *gopolls.BasicPoll:
-				evaluated = typedPoll.Tally()
+				if truncated := typedPoll.TruncateVoters(); len(truncated) > 0 {
+					pollErr = errors.New("there were invalid votes for a poll! should not happen")
+				} else {
+					evaluated = typedPoll.Tally()
+				}
 			case *gopolls.MedianPoll:
-				evaluated = typedPoll.Tally(gopolls.NoWeight)
+				if truncated := typedPoll.TruncateVoters(); len(truncated) > 0 {
+					pollErr = errors.New("there were invalid votes for a poll! should not happen")
+				} else {
+					evaluated = typedPoll.Tally(gopolls.NoWeight)
+				}
 			case *gopolls.SchulzePoll:
-				evaluated = typedPoll.Tally()
+				if truncated := typedPoll.TruncateVoters(); len(truncated) > 0 {
+					pollErr = errors.New("there were invalid votes for a poll! should not happen")
+				} else {
+					evaluated = typedPoll.Tally()
+				}
 			default:
-				panic(fmt.Sprintf("Unsupported poll type %s", reflect.TypeOf(poll)))
+				pollErr = fmt.Errorf("unsupported poll type %s", reflect.TypeOf(poll))
 			}
 			ch <- pollRes{
 				index: index,
 				res:   evaluated,
+				err:   pollErr,
 			}
 		}(i, p)
 	}
 
+	var err error
+	smallestPollIndex := -1
+
 	for i := 0; i < len(polls); i++ {
 		pollRes := <-ch
+		if pollRes.err != nil && (smallestPollIndex < 0 || pollRes.index < smallestPollIndex) {
+			err = pollRes.err
+			smallestPollIndex = pollRes.index
+		}
 		res[pollRes.index] = pollRes.res
 	}
 
-	return res
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func main() {
