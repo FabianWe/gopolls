@@ -73,7 +73,7 @@ var DefaultParserTemplateMap = make(map[string]ParserCustomizer, 3)
 func init() {
 	DefaultParserTemplateMap[BasicPollType] = NewBasicVoteParser()
 	DefaultParserTemplateMap[MedianPollType] = NewMedianVoteParser(DefaultCurrencyHandler)
-	DefaultParserTemplateMap[SchulzePollType] = NewSchuleVoteParser(-1)
+	DefaultParserTemplateMap[SchulzePollType] = NewSchulzeVoteParser(-1)
 }
 
 // CustomizeParsers customizes all polls with a given template.

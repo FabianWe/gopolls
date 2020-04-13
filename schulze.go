@@ -151,11 +151,11 @@ type SchulzeVoteParser struct {
 	Length int
 }
 
-// NewSchuleVoteParser returns a new SchulzeVoteParser.
+// NewSchulzeVoteParser returns a new SchulzeVoteParser.
 //
 // The length argument is allowed to be negative in which case the length check is disabled.
 // Set it to a length >= 0 to enable the check or use WithLength.
-func NewSchuleVoteParser(length int) *SchulzeVoteParser {
+func NewSchulzeVoteParser(length int) *SchulzeVoteParser {
 	return &SchulzeVoteParser{Length: length}
 }
 
