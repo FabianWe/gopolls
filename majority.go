@@ -45,6 +45,10 @@ func ComputeMajority(majority *big.Rat, votesSum Weight) Weight {
 	return Weight(asInt)
 }
 
+// ComputePercentage is used to calculate how many percent of the voters (or given their weight)
+// voted for a certain option.
+// To remain as exact as possible we use big.Rat values.
+// The computed percentage is simply votes/votesSum. If votesSum is 0 the result will always be zero.
 func ComputePercentage(votes, votesSum Weight) *big.Rat {
 	if votesSum == 0 {
 		return big.NewRat(0, 1)
@@ -54,6 +58,11 @@ func ComputePercentage(votes, votesSum Weight) *big.Rat {
 
 var oneHundredRat = big.NewRat(100, 1)
 
+// FormatPercentage is used to format a percent value (usually this value should be 0 <= value <= 1).
+// You can use this function to get consistent output throughout your application.
+// The returned percentage is always with three precision points after the comma.
+//
+// The percent value is multiplied with 100, so 1/2 gets formatted to "50.000".
 func FormatPercentage(percent *big.Rat) string {
 	p := new(big.Rat)
 	p.Mul(percent, oneHundredRat)
