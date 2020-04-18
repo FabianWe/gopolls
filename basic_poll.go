@@ -150,7 +150,7 @@ func (parser *BasicVoteParser) basicStyle(s string, voter *Voter) (*BasicVote, b
 }
 
 func (parser *BasicVoteParser) rankingStyle(s string, voter *Voter) (*BasicVote, bool) {
-	ranking, rankingErr := parserSchulzeRanking(s, 2)
+	ranking, rankingErr := parseSchulzeRanking(s, 2)
 	if rankingErr != nil {
 		return nil, false
 	}

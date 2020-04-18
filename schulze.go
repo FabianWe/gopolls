@@ -102,7 +102,7 @@ func NewSchulzeAye(numOptions int) SchulzeRanking {
 }
 
 // private because from outside the parser implementing the parser interface should be used
-func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
+func parseSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 	split := strings.FieldsFunc(s, func(r rune) bool {
 		return r == ',' || r == '/'
 	})
@@ -115,7 +115,7 @@ func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 		asString = strings.TrimSpace(asString)
 		asInt, intErr := strconv.Atoi(asString)
 		if intErr != nil {
-			return nil, NewPollingSyntaxError(intErr, "can't parse schulze ranking")
+			return nil, NewPollingSyntaxError(intErr, "can't parse schulze ranking, invalid ranking string")
 		}
 		res[i] = asInt
 	}
@@ -176,7 +176,7 @@ func (parser *SchulzeVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCust
 
 // ParseFromString implements the VoteParser interface, for details see type description.
 func (parser *SchulzeVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
-	ranking, err := parserSchulzeRanking(s, parser.Length)
+	ranking, err := parseSchulzeRanking(s, parser.Length)
 	if err != nil {
 		return nil, err
 	}
