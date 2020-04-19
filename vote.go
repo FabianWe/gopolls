@@ -793,7 +793,7 @@ func (m *PollMatrix) fillAllPolls(voters VotersMap, polls PollMap, parsers map[s
 	return err
 }
 
-func (m *PollMatrix) FillPollWithVotes(polls PollMap, voters VotersMap,
+func (m *PollMatrix) FillPollsWithVotes(polls PollMap, voters VotersMap,
 	parsers map[string]VoteParser, policies PolicyMap,
 	allowMissingVoters, allowMissingPolls bool) (actualVoters VotersMap, actualPolls PollMap, err error) {
 	// first ensure matrix structure

@@ -384,33 +384,43 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	// try to parse the matrix
 	csvReader := gopolls.NewVotesCSVReader(file)
 	csvReader.Sep = ';'
-	matrix, matrixErr := gopolls.NewVotersMatrixFromCSV(csvReader, context.Voters, context.PollCollection)
+	matrix, matrixErr := gopolls.ReadMatrixFromCSV(csvReader)
 	if matrixErr != nil {
 		return render(matrixErr)
 	}
+	votersMap, votersMapErr := gopolls.VotersToMap(context.Voters)
+	fmt.Println(votersMap, votersMapErr)
+	if votersMapErr != nil {
+		return render(votersMapErr)
+	}
 
-	// matrix has been parsed, so now try to parse the votes from it
-	polls, pollsErr := gopolls.ConvertSkeletonsToPolls(matrix.Polls,
+	pollsMap, pollsMapErr := context.PollCollection.SkeletonsToMap()
+	if pollsMapErr != nil {
+		return render(pollsMapErr)
+	}
+
+	polls, pollsErr := gopolls.ConvertSkeletonMapToEmptyPolls(pollsMap,
 		gopolls.DefaultSkeletonConverter)
 	if pollsErr != nil {
 		return render(pollsErr)
 	}
 
 	// next try to parse the results, first generate the parsers
-	parsers, parsersErr := gopolls.CustomizeParsers(polls, gopolls.DefaultParserTemplateMap)
+	parsers, parsersErr := gopolls.CustomizeParsersToMap(polls, gopolls.DefaultParserTemplateMap)
 	if parsersErr != nil {
 		return render(parsersErr)
 	}
 
 	// parsers are of type ParserCustomizer, we need type VoteParser (this is actually a sub type)
-	parsersCasted := make([]gopolls.VoteParser, len(parsers))
-	for i, p := range parsers {
-		parsersCasted[i] = p
+	parsersCasted := make(map[string]gopolls.VoteParser, len(parsers))
+	for name, p := range parsers {
+		parsersCasted[name] = p
 	}
 
 	// now add all votes
-	policies := gopolls.GeneratePoliciesList(gopolls.IgnoreEmptyVote, len(polls))
-	votesErr := matrix.FillVotesFromMatrix(polls, parsersCasted, policies)
+	policies := gopolls.GeneratePoliciesMap(gopolls.IgnoreEmptyVote, polls)
+	_, _, votesErr := matrix.FillPollsWithVotes(polls, votersMap, parsersCasted, policies,
+		true, false)
 	if votesErr != nil {
 		return render(votesErr)
 	}
@@ -460,21 +470,21 @@ func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffe
 	return res
 }
 
-func evaluatePolls(polls []gopolls.AbstractPoll) ([]interface{}, error) {
-	res := make([]interface{}, len(polls))
+func evaluatePolls(polls gopolls.PollMap) (map[string]interface{}, error) {
+	res := make(map[string]interface{}, len(polls))
 
 	// type used for the channel to communicate
 	type pollRes struct {
-		index int
-		res   interface{}
-		err   error
+		pollName string
+		res      interface{}
+		err      error
 	}
 
 	ch := make(chan pollRes, 1)
 
 	// evaluate each poll
-	for i, p := range polls {
-		go func(index int, poll gopolls.AbstractPoll) {
+	for pollName, p := range polls {
+		go func(name string, poll gopolls.AbstractPoll) {
 			var evaluated interface{}
 			var pollErr error
 			switch typedPoll := poll.(type) {
@@ -500,23 +510,21 @@ func evaluatePolls(polls []gopolls.AbstractPoll) ([]interface{}, error) {
 				pollErr = fmt.Errorf("unsupported poll type %s", reflect.TypeOf(poll))
 			}
 			ch <- pollRes{
-				index: index,
-				res:   evaluated,
-				err:   pollErr,
+				pollName: name,
+				res:      evaluated,
+				err:      pollErr,
 			}
-		}(i, p)
+		}(pollName, p)
 	}
 
 	var err error
-	smallestPollIndex := -1
 
 	for i := 0; i < len(polls); i++ {
 		pollRes := <-ch
-		if pollRes.err != nil && (smallestPollIndex < 0 || pollRes.index < smallestPollIndex) {
+		if err == nil && pollRes.err != nil {
 			err = pollRes.err
-			smallestPollIndex = pollRes.index
 		}
-		res[pollRes.index] = pollRes.res
+		res[pollRes.pollName] = pollRes.res
 	}
 
 	if err != nil {
