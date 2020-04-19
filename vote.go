@@ -76,7 +76,7 @@ func init() {
 	DefaultParserTemplateMap[SchulzePollType] = NewSchulzeVoteParser(-1)
 }
 
-// CustomizeParsers customizes all polls with a given template.
+// CustomizeParsers customizes parser templates for each poll.
 //
 // As discussed in the documentation for ParserCustomizer each parser can be customized for a specific poll.
 // This method will apply CustomizeForPoll on a list of polls.
@@ -91,9 +91,35 @@ func init() {
 //
 // It returns a PollTypeError if a template is not found in templates and returns any error from calls to
 // CustomizeForPoll.
+//
+// CustomizeParsersToMap is a function that has the same functionality but for maps.
 func CustomizeParsers(polls []AbstractPoll, templates map[string]ParserCustomizer) ([]ParserCustomizer, error) {
 	res := make([]ParserCustomizer, len(polls))
 	for i, poll := range polls {
+		// get the parserTemplate
+		parserTemplate, hasTemplate := templates[poll.PollType()]
+		if !hasTemplate {
+			return nil,
+				NewPollTypeError("no matching parserTemplate for type %s (name %s) found",
+					reflect.TypeOf(poll), poll.PollType())
+		}
+		// try to customize
+		customized, customizeErr := parserTemplate.CustomizeForPoll(poll)
+		if customizeErr != nil {
+			return nil, customizeErr
+		}
+		res[i] = customized
+	}
+	return res, nil
+}
+
+// CustomizeParsersToMap customizes parser templates for each poll.
+//
+// For details see CustomizeParsers.
+// This function will return one entry in the result map for each poll in polls.
+func CustomizeParsersToMap(polls PollMap, templates map[string]ParserCustomizer) (map[string]ParserCustomizer, error) {
+	res := make(map[string]ParserCustomizer, len(polls))
+	for name, poll := range polls {
 		// get the parserTemplate
 		parserTemplate, hasTemplate := templates[poll.PollType()]
 		if !hasTemplate {
@@ -106,7 +132,7 @@ func CustomizeParsers(polls []AbstractPoll, templates map[string]ParserCustomize
 		if customizeErr != nil {
 			return nil, customizeErr
 		}
-		res[i] = customized
+		res[name] = customized
 	}
 	return res, nil
 }
@@ -423,19 +449,6 @@ func (m *VotersMatrix) verifyAndFillPolls() error {
 	return nil
 }
 
-// VoteGenerator is used to describe polls that can produce a poll specific vote type for a basic answer
-// (yes, no or abstention).
-//
-// It is not allowed to return a nil vote and error = nil, that is if there is no error the returned
-// vote is not allowed to be nil.
-//
-// It should return a PollTypeError if an answer is not supported (or not at all).
-// All polls implemented at the moment implement this interface.
-type VoteGenerator interface {
-	AbstractPoll
-	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
-}
-
 // EmptyVotePolicy describes the behavior if an "empty" vote is found.
 //
 // By empty vote we mean that a certain voter just didn't cast a vote for a poll.
@@ -473,6 +486,19 @@ func GeneratePoliciesList(policy EmptyVotePolicy, num int) []EmptyVotePolicy {
 	return res
 }
 
+// PolicyMap defines a mapping from poll name to an empty vote policy.
+type PolicyMap map[string]EmptyVotePolicy
+
+// GeneratePoliciesMap is just a small helper function that returns a Policymap for all polls in the given map.
+// The map returned maps each poll name to the given policy.
+func GeneratePoliciesMap(policy EmptyVotePolicy, polls PollMap) PolicyMap {
+	res := make(PolicyMap, len(polls))
+	for name := range polls {
+		res[name] = policy
+	}
+	return res
+}
+
 // ErrEmptyPollPolicy is an error used if a policy is set to RaiseErrorEmptyVote and an empty vote was found.
 // GenerateEmptyVoteForVoter will in this case return an error e s.t. errors.Is(e, ErrEmptyPollPolicy) returns true.
 // This should of course be checked before errors.Is(e, ErrPoll) because this is true for all internal errors.
@@ -481,7 +507,7 @@ var ErrEmptyPollPolicy = NewPollTypeError("empty votes are not allowed")
 // GenerateEmptyVoteForVoter can be called to generate a vote for a poll if the input was empty.
 // By empty we mean that the voter simple didn't cast a vote.
 // If this method is called it will chose the action depending on the policy.
-
+//
 // If it is IgnoreEmptyVote it returns nil for the vote and nil as an error.
 // So be aware that a vote can be nil even if the error is nil.
 //
@@ -611,4 +637,210 @@ func (m *VotersMatrix) FillVotesFromMatrix(polls []AbstractPoll, parsers []VoteP
 
 	// now insert
 	return m.fillAllPolls(polls, parsers, policies)
+}
+
+type PollMatrix struct {
+	Head []string
+	Body [][]string
+}
+
+func ReadMatrixFromCSV(r *VotesCSVReader) (*PollMatrix, error) {
+	head, body, err := r.ReadRecords()
+
+	if err != nil {
+		return nil, err
+	}
+	m := PollMatrix{
+		Head: head,
+		Body: body,
+	}
+	return &m, nil
+}
+
+func (m *PollMatrix) MatchEntries(voters VotersMap, polls PollMap) (matchedVoters VotersMap, matchedPolls PollMap, err error) {
+	matchedVoters = make(VotersMap, len(voters))
+	matchedPolls = make(PollMap, len(polls))
+
+	// this function will just make sure to return nil maps if err is != nil
+	defer func() {
+		if err != nil {
+			matchedVoters = nil
+			matchedPolls = nil
+		}
+	}()
+
+	if len(m.Head) == 0 {
+		err = NewPollingSyntaxError(nil, "poll matrix must contain at least one column (voter name)")
+		return
+	}
+
+	// now see if all voters exist and the names from csv are uniqe
+	for _, row := range m.Body {
+		if len(row) != len(m.Head) {
+			err = NewPollingSyntaxError(nil, "number of columns in csv is invalid, expected length of %d (head), got length %d instead",
+				len(m.Head), len(row))
+			return
+		}
+		// len(head) >= 0 from check above
+		voterName := row[0]
+		// check if we have a duplicate
+		if _, alreadyFound := matchedVoters[voterName]; alreadyFound {
+			err = NewDuplicateError(fmt.Sprintf("voter \"%s\" was found multiple times in the matrix body",
+				voterName))
+			return
+		}
+		// make sure that the voter is valid, i.e. exists in the original map
+		if voter, exists := voters[voterName]; exists {
+			matchedVoters[voterName] = voter
+		} else {
+			err = NewPollingSemanticError(nil, "voter \"%s\" from matrix not found in allowed voters",
+				voterName)
+			return
+		}
+	}
+
+	// the same for polls
+	// m.Head[0] is the voter name column
+	for _, pollName := range m.Head[1:] {
+		if _, alreadyFound := matchedPolls[pollName]; alreadyFound {
+			err = NewDuplicateError(fmt.Sprintf("poll \"%s\" was found multiple times in the matrix head",
+				pollName))
+			return
+		}
+		// make sure that the poll is valid, i.e. exists in the original map
+		if poll, exists := polls[pollName]; exists {
+			matchedPolls[pollName] = poll
+		} else {
+			err = NewPollingSemanticError(nil, "poll \"%s\" from matrix not found in allowed polls",
+				pollName)
+			return
+		}
+	}
+
+	return
+}
+
+func (m *PollMatrix) generateSingleVote(poll AbstractPoll, parser VoteParser, policy EmptyVotePolicy, voter *Voter, s string) (AbstractVote, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return policy.GenerateEmptyVoteForVoter(voter, poll)
+	}
+	return parser.ParseFromString(s, voter)
+}
+
+func (m *PollMatrix) generateVotesForPoll(columnIndex int, voters VotersMap, poll AbstractPoll, parser VoteParser, policy EmptyVotePolicy) error {
+	// iterate over all voters and generate the vote
+	// this could be nil due to the policy, in which case it should be ignored
+	for _, row := range m.Body {
+		voterName := row[0]
+		voter := voters[voterName]
+		voteString := row[columnIndex]
+		vote, voteErr := m.generateSingleVote(poll, parser, policy, voter, voteString)
+		if voteErr != nil {
+			return voteErr
+		}
+		// only if vote is not nil add it
+		if vote != nil {
+			if addErr := poll.AddVote(vote); addErr != nil {
+				return addErr
+			}
+		}
+	}
+	return nil
+}
+
+func (m *PollMatrix) fillAllPolls(voters VotersMap, polls PollMap, parsers map[string]VoteParser, policies PolicyMap) error {
+	// internal struct used in a channel
+	type pollParseRes struct {
+		column int
+		name   string
+		err    error
+	}
+
+	// channel for communication
+	ch := make(chan pollParseRes, 1)
+
+	// parse all votes for all polls (concurrently) with generateVotesForPoll
+	for column, pollName := range m.Head[1:] {
+		go func(column int, pollName string) {
+			poll := polls[pollName]
+			parser := parsers[pollName]
+			policy := policies[pollName]
+			// index + 1 because column starts with 0
+			collErr := m.generateVotesForPoll(column+1, voters, poll, parser, policy)
+			ch <- pollParseRes{
+				column: column,
+				name:   pollName,
+				err:    collErr,
+			}
+		}(column, pollName)
+	}
+
+	// we capture the error in the smallest column and return it
+	var err error
+	smallestPollIndex := -1
+
+	numPolls := len(m.Head) - 1
+
+	for i := 0; i < numPolls; i++ {
+		colRes := <-ch
+		if colRes.err != nil && (smallestPollIndex < 0 || colRes.column < smallestPollIndex) {
+			err = colRes.err
+			smallestPollIndex = colRes.column
+
+		}
+	}
+	return err
+}
+
+func (m *PollMatrix) FillPollWithVotes(polls PollMap, voters VotersMap,
+	parsers map[string]VoteParser, policies PolicyMap,
+	allowMissingVoters, allowMissingPolls bool) (actualVoters VotersMap, actualPolls PollMap, err error) {
+	// first ensure matrix structure
+	actualVoters, actualPolls, err = m.MatchEntries(voters, polls)
+	if err != nil {
+		return
+	}
+	// check if there are missing entries and test if this is allowed or not
+
+	if !allowMissingVoters && len(actualVoters) != len(voters) {
+		// create a list of all missing voters
+		missing := make([]string, 0, len(voters))
+		for voterName := range voters {
+			if _, has := actualVoters[voterName]; !has {
+				missing = append(missing, voterName)
+			}
+		}
+		err = NewPollingSemanticError(nil, "the following voters are missing: %s", strings.Join(missing, ", "))
+		return
+	}
+
+	if !allowMissingPolls && len(actualPolls) != len(polls) {
+		// create a list of all missing polls
+		missing := make([]string, 0, len(polls))
+		for pollName := range polls {
+			if _, has := actualPolls[pollName]; !has {
+				missing = append(missing, pollName)
+			}
+		}
+		err = NewPollingSemanticError(nil, "the following polls are missing: %s", strings.Join(missing, ", "))
+		return
+	}
+
+	// make sure that each poll has a parser and a policy
+	for pollName := range actualPolls {
+		if _, hasParser := parsers[pollName]; !hasParser {
+			err = NewPollingSemanticError(nil, "there is no parser for poll %s", pollName)
+			return
+		}
+
+		if _, hasPolicy := policies[pollName]; !hasPolicy {
+			err = NewPollingSemanticError(nil, "there is no policy for poll %s", pollName)
+			return
+		}
+	}
+
+	// now insert
+	err = m.fillAllPolls(actualVoters, actualPolls, parsers, policies)
+	return
 }
