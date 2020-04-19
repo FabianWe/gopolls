@@ -242,6 +242,17 @@ func (coll *PollSkeletonCollection) NumSkeletons() int {
 	return res
 }
 
+// HasPolls returns true if there is at least one poll skeleton in any of the groups.
+func (coll *PollSkeletonCollection) HasSkeleton() bool {
+	for _, group := range coll.Groups {
+		if group.NumSkeletons() > 0 {
+			// found at least one
+			return true
+		}
+	}
+	return false
+}
+
 // CollectSkeletons returns a list of all skeletons that appear in any of the groups.
 func (coll *PollSkeletonCollection) CollectSkeletons() []AbstractPollSkeleton {
 	res := make([]AbstractPollSkeleton, 0, len(coll.Groups))

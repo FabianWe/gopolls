@@ -254,7 +254,7 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 		context.Voters = voters
 		context.VotersSourceFileName = handler.Filename
 		log.Printf("Successfuly parsed %d voters from %s\n", len(voters), handler.Filename)
-		res := newRedirectHandlerRes(http.StatusFound, "./")
+		res := newRedirectHandlerRes(http.StatusFound, "/voters")
 		return res
 	}
 
@@ -319,7 +319,7 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 		context.PollCollection = collection
 		context.CollectionSourceFileName = handler.Filename
 		log.Printf("Successfuly parsed %d polls from %s\n", collection.NumSkeletons(), handler.Filename)
-		res := newRedirectHandlerRes(http.StatusFound, "./")
+		res := newRedirectHandlerRes(http.StatusFound, "/polls")
 		return res
 	}
 
@@ -365,7 +365,7 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(nil)
 	}
 
-	if len(context.Voters) == 0 || context.PollCollection.NumSkeletons() == 0 {
+	if len(context.Voters) == 0 || !context.PollCollection.HasSkeleton() {
 		// not really nice but well
 		return render(gopolls.NewPollingSemanticError(nil, "no voters / polls have been uploaded yet"))
 	}
@@ -389,7 +389,6 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(matrixErr)
 	}
 	votersMap, votersMapErr := gopolls.VotersToMap(context.Voters)
-	fmt.Println(votersMap, votersMapErr)
 	if votersMapErr != nil {
 		return render(votersMapErr)
 	}
@@ -444,9 +443,29 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	}
 	type templateGroup struct {
 		Title string
-		Polls []templatePollEntry
+		Polls []*templatePollEntry
 	}
-	// now use the original collection to
+
+	results := make([]*templateGroup, context.PollCollection.NumGroups())
+
+	for i, group := range context.PollCollection.Groups {
+		templateGroup := &templateGroup{
+			Title: group.Title,
+			Polls: make([]*templatePollEntry, group.NumSkeletons()),
+		}
+		results[i] = templateGroup
+		for j, pollSkell := range group.Skeletons {
+			name := pollSkell.GetName()
+			templateGroup.Polls[j] = &templatePollEntry{
+				Skel:   pollSkell,
+				Poll:   polls[name],
+				Result: tallied[name],
+			}
+		}
+	}
+
+	renderContext.AdditionalData["results"] = results
+
 	return executeTemplate(h.evaluationResultsTemplate, renderContext, buff)
 }
 
@@ -548,11 +567,11 @@ func main() {
 	csvH := newExportCSVTemplateHandler()
 	evaluateH := newEvaluationHandler(base)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(staticRoot))))
-	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
-	http.HandleFunc("/polls/", toHandleFunc(pollsH, &context))
-	http.HandleFunc("/votes/csv/", toHandleFunc(csvH, &context))
-	http.HandleFunc("/evaluate/", toHandleFunc(evaluateH, &context))
-	http.HandleFunc("/", toHandleFunc(mainH, &context))
+	http.HandleFunc("/voters", toHandleFunc(votersH, &context))
+	http.HandleFunc("/polls", toHandleFunc(pollsH, &context))
+	http.HandleFunc("/votes/csv", toHandleFunc(csvH, &context))
+	http.HandleFunc("/evaluate", toHandleFunc(evaluateH, &context))
+	http.HandleFunc("/poll", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))

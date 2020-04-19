@@ -101,6 +101,21 @@ func NewSchulzeAye(numOptions int) SchulzeRanking {
 	return res
 }
 
+// IsAbstention returns true if all options are ranked with exactly the same number.
+func (ranking SchulzeRanking) IsAbstention() bool {
+	if len(ranking) == 0 {
+		// not a really useful case
+		return true
+	}
+	first := ranking[0]
+	for _, element := range ranking[1:] {
+		if element != first {
+			return false
+		}
+	}
+	return true
+}
+
 // private because from outside the parser implementing the parser interface should be used
 func parseSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 	split := strings.FieldsFunc(s, func(r rune) bool {

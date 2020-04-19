@@ -14,16 +14,60 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */ -}}
 
-{{define "basic_poll"}}
-    <h4>{{.PollSkel.GetName}}</h4>
+{{define "basicpoll"}}
+    <h4>{{.Skel.GetName}}</h4>
+    <p>
+        Number of voters: {{.Result.VotersCount}}<br/>
+        Weight sum of voters: {{.Result.VotesSum}}
+    </p>
 
+    <table class="pure-table">
+        <thead>
+        <tr>
+            <th>Option</th>
+            <th># Votes</th>
+            <th>% Votes</th>
+            <th>&Sigma; Weight</th>
+            <th>% Weight</th>
+        </tr>
+        </thead>
+        <tr>
+            <td>Yes</td>
+            <td>{{.Result.NumberVoters.NumAyes}}</td>
+            <td>{{percentage .Result.NumberVoters.NumAyes .Result.VotersCount}}</td>
+            <td>{{.Result.WeightedVotes.NumAyes}}</td>
+            <td>{{percentage .Result.WeightedVotes.NumAyes .Result.VotesSum}}</td>
+        </tr>
+        <tr>
+            <td>No</td>
+            <td>{{.Result.NumberVoters.NumNoes}}</td>
+            <td>{{percentage .Result.NumberVoters.NumNoes .Result.VotersCount}}</td>
+            <td>{{.Result.WeightedVotes.NumNoes}}</td>
+            <td>{{percentage .Result.WeightedVotes.NumNoes .Result.VotesSum}}</td>
+        </tr>
+        <tr>
+            <td>Abstention</td>
+            <td>{{.Result.NumberVoters.NumAbstention}}</td>
+            <td>{{percentage .Result.NumberVoters.NumAbstention .Result.VotersCount}}</td>
+            <td>{{.Result.WeightedVotes.NumAbstention}}</td>
+            <td>{{percentage .Result.WeightedVotes.NumAbstention .Result.VotesSum}}</td>
+        </tr>
+    </table>
 {{end}}
 
 {{block "content" .}}
-    <h2 class="content-subhead">Evaluation Results</h2>
+    <h2 class="content-subhead">Evaluation Results for {{.AdditionalData.title}}</h2>
 
-    Displaying results! Yeah! File is {{.AdditionalData.source_file_name}}
-    {{template "bascic_poll"}}
+    Displaying results for file {{.AdditionalData.source_file_name}}
     <br/>
-    {{template "basic_poll"}}
+
+    {{range $group := .AdditionalData.results}}
+        <h3>{{$group.Title}}</h3>
+        {{range $pollEntry := $group.Polls}}
+            {{if eq "basic-poll" $pollEntry.Poll.PollType}}
+                {{template "basicpoll" $pollEntry}}
+            {{end}}
+        {{end}}
+    {{end}}
+
 {{end}}

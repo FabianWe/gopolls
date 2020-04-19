@@ -39,11 +39,11 @@ limitations under the License.
             </thead>
             {{range $i, $voter := .Voters}}
                 <tr>
-            <td>{{inc $i}}</td>
-            <td>{{$voter.Name}}</td>
-            <td>{{$voter.Weight}}</td>
-        </tr>
-    {{end}}
+                    <td>{{inc $i}}</td>
+                    <td>{{$voter.Name}}</td>
+                    <td>{{$voter.Weight}}</td>
+                </tr>
+            {{end}}
     </table>
 {{else}}
     No voters yet.
