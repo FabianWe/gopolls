@@ -76,6 +76,49 @@ limitations under the License.
     </table>
 {{end}}
 
+{{define "schulzepoll"}}
+    <h4>{{.Skel.GetName}}</h4>
+    Number of voters: {{len .Poll.Votes}}<br/>
+    Weight sum of voters: {{.Result.WeightSum}}<br/>
+    Options for the poll are:
+    <ul>
+        {{range $option := .Skel.Options}}
+            <li>{{$option}}</li>
+        {{end}}
+    </ul>
+    {{$leNo := .Result.StrictlyBetterThanNo}}
+    {{$leqNo := .Result.BetterOrEqualNo}}
+    <table class="pure-table">
+        <thead>
+        <tr>
+            <th>Group / Option</th>
+            <th># Better No (&lt; No)</th>
+            <th># Better or equal No (&#8804; No)</th>
+        </tr>
+        </thead>
+        {{range $groupNum, $rankingGroup := .Result.RankedGroups}}
+            <tr class="pure-table-odd">
+                <td colspan="3">
+                    Group {{$groupNum}}
+                </td>
+            </tr>
+            {{range $optionID := $rankingGroup}}
+                <tr>
+                    <td>
+                        {{index $.Skel.Options $optionID}}
+                    </td>
+                    <td>
+                        {{index $leNo $optionID}}
+                    </td>
+                    <td>
+                        {{index $leqNo $optionID}}
+                    </td>
+                </tr>
+            {{end}}
+        {{end}}
+    </table>
+{{end}}
+
 {{block "content" .}}
     <h2 class="content-subhead">Evaluation Results for {{.AdditionalData.title}}</h2>
 
@@ -85,10 +128,15 @@ limitations under the License.
     {{range $group := .AdditionalData.results}}
         <h3>{{$group.Title}}</h3>
         {{range $pollEntry := $group.Polls}}
-            {{if eq "basic-poll" $pollEntry.Poll.PollType}}
+            {{$pollTypeStr := $pollEntry.Poll.PollType}}
+            {{if eq "basic-poll" $pollTypeStr}}
                 {{template "basicpoll" $pollEntry}}
-            {{else if eq "median-poll" $pollEntry.Poll.PollType}}
+            {{else if eq "median-poll" $pollTypeStr}}
                 {{template "medianpoll" $pollEntry}}
+            {{else if eq "schulze-poll" $pollTypeStr}}
+                {{template "schulzepoll" $pollEntry}}
+            {{else}}
+                Unknown poll type {{$pollEntry.Poll.PollType}}
             {{end}}
         {{end}}
     {{end}}

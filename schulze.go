@@ -414,12 +414,12 @@ func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 // (or weights) strictly preferred i to j it counts how many voters preferred i to j or ranked them equally
 // (ranking[i] < ranking[j] vs ranking[i] <= ranking[j]).
 //
-// VotesSum is the sum of the weights of all votes in the poll.
+// WeightSum is the sum of the weights of all votes in the poll.
 type SchulzeResult struct {
 	D, P         SchulzeMatrix
 	DNonStrict   SchulzeMatrix
 	RankedGroups SchulzeWinsList
-	VotesSum     Weight
+	WeightSum    Weight
 }
 
 // NewSchulzeResult returns a new SchulzeResult.
@@ -429,7 +429,7 @@ func NewSchulzeResult(d, dNonStrict, p SchulzeMatrix, rankedGroups SchulzeWinsLi
 		DNonStrict:   dNonStrict,
 		P:            p,
 		RankedGroups: rankedGroups,
-		VotesSum:     votesSum,
+		WeightSum:    votesSum,
 	}
 }
 

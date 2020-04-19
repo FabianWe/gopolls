@@ -584,6 +584,7 @@ func main() {
 	http.HandleFunc("/home", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
+	fmt.Printf("Visit http://%s/home in your browser\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
