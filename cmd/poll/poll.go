@@ -138,6 +138,16 @@ func baseTemplates() *template.Template {
 		"inc": func(i int) int {
 			return i + 1
 		},
+		"formatMedianToCurrency": func(val gopolls.MedianUnit) string {
+			var asCurrency gopolls.CurrencyValue
+			if val == gopolls.NoMedianUnitValue {
+				asCurrency = gopolls.NewCurrencyValue(0, "€")
+			} else {
+				asCurrency = gopolls.NewCurrencyValue(int(val), "€")
+			}
+
+			return currencyHandler.Format(asCurrency)
+		},
 		"formatCurrency": func(val gopolls.CurrencyValue) string {
 			return currencyHandler.Format(val)
 		},
@@ -571,7 +581,7 @@ func main() {
 	http.HandleFunc("/polls", toHandleFunc(pollsH, &context))
 	http.HandleFunc("/votes/csv", toHandleFunc(csvH, &context))
 	http.HandleFunc("/evaluate", toHandleFunc(evaluateH, &context))
-	http.HandleFunc("/poll", toHandleFunc(mainH, &context))
+	http.HandleFunc("/home", toHandleFunc(mainH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))

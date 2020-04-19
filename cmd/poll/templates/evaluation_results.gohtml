@@ -55,6 +55,27 @@ limitations under the License.
     </table>
 {{end}}
 
+{{define "medianpoll"}}
+    <h4>{{.Skel.GetName}}</h4>
+    <p>
+        Number of voters: {{len .Poll.Votes}}<br/>
+        Weight sum of voters: {{.Result.WeightSum}}<br/>
+        Required majority: &gt; {{.Result.RequiredMajority}}<br/>
+    </p>
+    <table class="pure-table">
+        <thead>
+        <tr>
+            <th>Amount requested</th>
+            <th>Amount authorized</th>
+        </tr>
+        </thead>
+        <tr>
+            <td>{{formatMedianToCurrency .Poll.Value}}</td>
+            <td>{{formatMedianToCurrency .Result.MajorityValue}}</td>
+        </tr>
+    </table>
+{{end}}
+
 {{block "content" .}}
     <h2 class="content-subhead">Evaluation Results for {{.AdditionalData.title}}</h2>
 
@@ -66,6 +87,8 @@ limitations under the License.
         {{range $pollEntry := $group.Polls}}
             {{if eq "basic-poll" $pollEntry.Poll.PollType}}
                 {{template "basicpoll" $pollEntry}}
+            {{else if eq "median-poll" $pollEntry.Poll.PollType}}
+                {{template "medianpoll" $pollEntry}}
             {{end}}
         {{end}}
     {{end}}
