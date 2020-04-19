@@ -213,6 +213,22 @@ func (h *mainHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.R
 	return executeTemplate(h.template, renderContext, buff)
 }
 
+type aboutHandler struct {
+	template *template.Template
+}
+
+func newAboutHandler(base *template.Template) *aboutHandler {
+	t := readTemplate(base, "about.gohtml")
+	return &aboutHandler{t}
+}
+
+func (h *aboutHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	renderContext := newRenderContext(context)
+	renderContext.AdditionalData["version"] = version
+	renderContext.AdditionalData["go_version"] = runtime.Version()
+	return executeTemplate(h.template, renderContext, buff)
+}
+
 type votersHandler struct {
 	template *template.Template
 }
@@ -572,6 +588,7 @@ func main() {
 	context := mainContext{}
 	context.PollCollection = gopolls.NewPollSkeletonCollection("dummy")
 	mainH := newMainHandler(base)
+	aboutH := newAboutHandler(base)
 	votersH := newVotersHandler(base)
 	pollsH := newPollsHandler(base)
 	csvH := newExportCSVTemplateHandler()
@@ -582,6 +599,7 @@ func main() {
 	http.HandleFunc("/votes/csv", toHandleFunc(csvH, &context))
 	http.HandleFunc("/evaluate", toHandleFunc(evaluateH, &context))
 	http.HandleFunc("/home", toHandleFunc(mainH, &context))
+	http.HandleFunc("/about", toHandleFunc(aboutH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
 	fmt.Printf("Visit http://%s/home in your browser\n", addr)
