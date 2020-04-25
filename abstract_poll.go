@@ -71,8 +71,8 @@ func (err PollTypeError) Error() string {
 // It is not allowed to return a nil vote and error = nil, that is if there is no error the returned
 // vote is not allowed to be nil.
 //
-// It should return a PollTypeError if an answer is not supported (or not at all).
-// All polls implemented at the moment implement this interface.
+// It should return a PollTypeError if an answer is not supported (or none at all).
+// All polls implemented at the moment also implement this interface.
 type VoteGenerator interface {
 	AbstractPoll
 	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
@@ -146,7 +146,7 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 
 // ConvertSkeletonsToPolls does the translation from a list of skeletons to a list of (empty) polls.
 // It uses a SkeletonConverter function to do the actual conversion and returns an error if any of the skeletons
-// in the list is not valid.
+// in the list is not "valid".
 // If converterFunction is nil DefaultSkeletonConverter is used.
 //
 // ConvertSkeletonsToPolls is a function that does the same for maps.
@@ -169,7 +169,7 @@ func ConvertSkeletonsToPolls(skeletons []AbstractPollSkeleton, converterFunction
 
 // ConvertSkeletonMapToEmptyPolls does the translation from a skeleton mapping to a map of (empty) polls.
 // It uses a SkeletonConverter function to do the actual conversion and returns an error if any of the skeletons
-// in the list is not valid.
+// in the map is not "valid".
 // If converterFunction is nil DefaultSkeletonConverter is used.
 //
 // ConvertSkeletonsToPolls is a function that does the same for lists.

@@ -196,7 +196,7 @@ func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abstract
 // VotesCSVReader can be used to parse a CSV file of votes (see wiki for details about CSV files).
 // It can only be used to parse the "matrix", that is the strings from the CSV file.
 // No conversion to a vote object is done, it reads the pure strings which then need to be processed further.
-// For an example see ReadMatrixFromCSV, but you probably want your own method for dealing with parsed CSV
+// For an example see ReadMatrixFromCSV, but you probably want your own method for dealing with a parsed CSV
 // file.
 type VotesCSVReader struct {
 	Sep rune
