@@ -495,17 +495,17 @@ func (parser *PollCollectionParser) ParseCollectionSkeletons(r io.Reader, curren
 		var handler stateHandleFunc
 		switch state {
 		case headState:
-			handler = handleHeadState
+			handler = parser.handleHeadState
 		case groupState:
-			handler = handleGroupState
+			handler = parser.handleGroupState
 		case pollState:
-			handler = handlePollState
+			handler = parser.handlePollState
 		case optionState:
-			handler = handleOptionState
+			handler = parser.handleOptionState
 		case groupOrPollState:
-			handler = handleGroupOrPollState
+			handler = parser.handleGroupOrPollState
 		case optionalOptionState:
-			handler = handleOptionalOptionState
+			handler = parser.handleOptionalOptionState
 		default:
 			return nil, errors.New("internal error: Parser entered an invalid state")
 		}
@@ -554,7 +554,7 @@ func (parser *PollCollectionParser) ParseCollectionSkeletonsFromString(currencyP
 	return parser.ParseCollectionSkeletons(r, currencyParser)
 }
 
-func handleHeadState(line string, context *parserContext) (parserState, error) {
+func (parser *PollCollectionParser) handleHeadState(line string, context *parserContext) (parserState, error) {
 	match := headLineRx.FindStringSubmatch(line)
 	if len(match) == 0 {
 		return invalidState, NewPollingSyntaxError(nil, "invalid head line, must be of form \"# <TITLE>\"")
@@ -566,7 +566,7 @@ func handleHeadState(line string, context *parserContext) (parserState, error) {
 	return groupState, nil
 }
 
-func handleGroupState(line string, context *parserContext) (parserState, error) {
+func (parser *PollCollectionParser) handleGroupState(line string, context *parserContext) (parserState, error) {
 	match := groupLineRx.FindStringSubmatch(line)
 	if len(match) == 0 {
 		return invalidState, NewPollingSyntaxError(nil, "invalid group line, must be of the form \"## <GROUP>\"")
@@ -576,7 +576,7 @@ func handleGroupState(line string, context *parserContext) (parserState, error) 
 	return pollState, nil
 }
 
-func handlePollState(line string, context *parserContext) (parserState, error) {
+func (parser *PollCollectionParser) handlePollState(line string, context *parserContext) (parserState, error) {
 	match := pollLineRx.FindStringSubmatch(line)
 	if len(match) == 0 {
 		return invalidState, NewPollingSyntaxError(nil, "invalid poll line, must be of the form \"### <POLL>\"")
@@ -585,7 +585,7 @@ func handlePollState(line string, context *parserContext) (parserState, error) {
 	return optionState, nil
 }
 
-func handleOptionState(line string, context *parserContext) (parserState, error) {
+func (parser *PollCollectionParser) handleOptionState(line string, context *parserContext) (parserState, error) {
 	// just some assertions to be sure
 	if context.lastPollName == "" {
 		panic("Internal error: Trying to parse poll option, but no poll was parsed first")
@@ -622,16 +622,16 @@ func handleOptionState(line string, context *parserContext) (parserState, error)
 	}
 }
 
-func handleGroupOrPollState(line string, context *parserContext) (parserState, error) {
+func (parser *PollCollectionParser) handleGroupOrPollState(line string, context *parserContext) (parserState, error) {
 	// first try group, if this fails (err != nil) try poll state
 	// note that these methods don't change the context if err != nil, so this is fine
-	groupRes, groupErr := handleGroupState(line, context)
+	groupRes, groupErr := parser.handleGroupState(line, context)
 	if groupErr == nil {
 		// success
 		return groupRes, nil
 	}
 	// not a group, then try poll
-	pollRes, pollErr := handlePollState(line, context)
+	pollRes, pollErr := parser.handlePollState(line, context)
 	if pollErr == nil {
 		return pollRes, nil
 	}
@@ -639,7 +639,7 @@ func handleGroupOrPollState(line string, context *parserContext) (parserState, e
 	return invalidState, NewPollingSyntaxError(nil, "expected either group or poll")
 }
 
-func handleOptionalOptionState(line string, context *parserContext) (parserState, error) {
+func (parser *PollCollectionParser) handleOptionalOptionState(line string, context *parserContext) (parserState, error) {
 	// now we have to parse either another option for the poll or a new group or a new poll
 	// we use the other handler function for this (handleGroupOrPollState)
 	// note that handleGroupOrPollState doesn't change the context if err != nil, so this is fine
@@ -653,7 +653,7 @@ func handleOptionalOptionState(line string, context *parserContext) (parserState
 		return optionalOptionState, nil
 	}
 	// now it must be group or new poll
-	handleRes, handleErr := handleGroupOrPollState(line, context)
+	handleRes, handleErr := parser.handleGroupOrPollState(line, context)
 	if handleErr == nil {
 		// everything okay
 		return handleRes, nil
