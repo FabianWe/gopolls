@@ -333,7 +333,8 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 	defer file.Close()
 
 	// now try to parse
-	collection, collectionErr := gopolls.ParseCollectionSkeletons(file, currencyHandler)
+	collectionParser := gopolls.NewPollCollectionParser()
+	collection, collectionErr := collectionParser.ParseCollectionSkeletons(file, currencyHandler)
 
 	if collectionErr == nil {
 		// now check for duplicate names in the polls, if there are any set error to a duplicate error

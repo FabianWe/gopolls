@@ -282,7 +282,7 @@ func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
 // The returned internals errors are either PollingSyntaxError or ParserValidationError.
 func (parser *VotersParser) ParseVoters(r io.Reader) ([]*Voter, error) {
 	scanner := bufio.NewScanner(r)
-	// if a max length is set create a buffer with that max length
+	// if a max line length is set create a buffer with that max length
 	if parser.MaxLineLength >= 0 {
 		// set max length of the buffer to that number
 		// the initial size of the buffer will be 4096, but if max length < 4096 we set it to that
@@ -298,7 +298,7 @@ func (parser *VotersParser) ParseVoters(r io.Reader) ([]*Voter, error) {
 	for scanner.Scan() {
 		lineNum++
 		if parser.MaxNumLines >= 0 && lineNum > parser.MaxNumLines {
-			return nil, NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in voters line are allowed", parser.MaxNumLines))
+			return nil, NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in voters files are allowed", parser.MaxNumLines))
 		}
 		line := scanner.Text()
 		// first test if the line should be ignored
@@ -412,9 +412,64 @@ func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserCon
 	return
 }
 
+type PollCollectionParser struct {
+	MaxNumLines       int
+	MaxNumPolls       int
+	MaxLineLength     int
+	MaxPollNameLength int
+	MaxNumOptions     int
+	MaxOptionLength   int
+	MaxCurrencyValue  int
+}
+
+func NewPollCollectionParser() *PollCollectionParser {
+	return &PollCollectionParser{
+		MaxNumLines:       -1,
+		MaxNumPolls:       -1,
+		MaxLineLength:     -1,
+		MaxPollNameLength: -1,
+		MaxNumOptions:     -1,
+		MaxOptionLength:   -1,
+		MaxCurrencyValue:  -1,
+	}
+}
+
+func (parser *PollCollectionParser) validateLine(line string, lineNum int) error {
+	if parser.MaxNumLines >= 0 && lineNum > parser.MaxNumLines {
+		return NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in polls file are allowed", parser.MaxNumLines))
+	}
+	if !utf8.ValidString(line) {
+		return InvalidEncodingError
+	}
+	if parser.MaxLineLength >= 0 {
+		// check number of bytes here, not number of runes!
+		if len(line) > parser.MaxLineLength {
+			return NewParserValidationError(fmt.Sprintf("line is too long: got line of length %d, allowed max length is %d",
+				len(line), parser.MaxLineLength))
+		}
+	}
+	return nil
+}
+
+func (parser *PollCollectionParser) setupScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	// max line length is set create a buffer with that max length
+	if parser.MaxLineLength >= 0 {
+		// set max length of the buffer to that number
+		// the initial size of the buffer will be 4096, but if max length < 4096 we set it to that
+		buffLength := 4096
+		if parser.MaxLineLength < 4096 {
+			buffLength = parser.MaxLineLength
+		}
+		buff := make([]byte, buffLength)
+		scanner.Buffer(buff, parser.MaxLineLength)
+	}
+	return scanner
+}
+
 // ParseCollectionSkeletons parses a collection of poll descriptions and returns them as skeletons.
 // See wiki and example files for format details.
-func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*PollSkeletonCollection, error) {
+func (parser *PollCollectionParser) ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*PollSkeletonCollection, error) {
 	if currencyParser == nil {
 		currencyParser = SimpleEuroHandler{}
 	}
@@ -423,11 +478,14 @@ func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*Poll
 	// initial state is head
 	state := headState
 	// read lines from scanner
-	scanner := bufio.NewScanner(r)
+	scanner := parser.setupScanner(r)
 	lineNum := 0
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
+		if validateLineErr := parser.validateLine(line, lineNum); validateLineErr != nil {
+			return nil, validateLineErr
+		}
 		// we can trim the line, no construct needs whitespaces in front / back
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -491,9 +549,9 @@ func ParseCollectionSkeletons(r io.Reader, currencyParser CurrencyParser) (*Poll
 }
 
 // ParseCollectionSkeletonsFromString works as ParseCollectionSkeletons but parses the input from a string.
-func ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*PollSkeletonCollection, error) {
+func (parser *PollCollectionParser) ParseCollectionSkeletonsFromString(currencyParser CurrencyParser, s string) (*PollSkeletonCollection, error) {
 	r := strings.NewReader(s)
-	return ParseCollectionSkeletons(r, currencyParser)
+	return parser.ParseCollectionSkeletons(r, currencyParser)
 }
 
 func handleHeadState(line string, context *parserContext) (parserState, error) {
