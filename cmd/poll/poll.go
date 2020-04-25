@@ -40,6 +40,7 @@ var currencyHandler = gopolls.SimpleEuroHandler{}
 // should be fine enough in this main file
 var templateRoot string
 var staticRoot string
+var comma rune
 
 type mainContext struct {
 	Voters         []*gopolls.Voter
@@ -409,7 +410,7 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 
 	// try to parse the matrix
 	csvReader := gopolls.NewVotesCSVReader(file)
-	csvReader.Sep = ';'
+	csvReader.Sep = comma
 	matrix, matrixErr := gopolls.ReadMatrixFromCSV(csvReader)
 	if matrixErr != nil {
 		return render(matrixErr)
@@ -503,7 +504,7 @@ func newExportCSVTemplateHandler() exportCSVTemplateHandler {
 
 func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
 	csvWriter := gopolls.NewVotesCSVWriter(buff)
-	csvWriter.Sep = ';'
+	csvWriter.Sep = comma
 	// write empty template
 	writeErr := csvWriter.GenerateEmptyTemplate(context.Voters, context.PollCollection.CollectSkeletons())
 	if writeErr != nil {
@@ -656,6 +657,8 @@ func printAbout() {
 func parseArgs() {
 	var rootString string
 	flag.StringVar(&rootString, "assets", "", "Directory in which the assets (templates and static) are, defaults to dir of executable")
+	var commaVar string
+	flag.StringVar(&commaVar, "comma", ";", "Comma separator for csv files, for historical reasons defaults to \";\"")
 	// test if help was given
 	if len(os.Args) > 1 && os.Args[1] == "help" {
 		printUsage()
@@ -688,6 +691,11 @@ func parseArgs() {
 		log.Fatalf("static directory does not exist, assumed it to be at %s", templateDir)
 	}
 
+	commaRunes := []rune(commaVar)
+	if len(commaRunes) != 1 {
+		log.Fatalf("comma separator must be a single character, got \"%s\"\n", commaVar)
+	}
+	comma = commaRunes[0]
 	templateRoot = templateDir
 	staticRoot = staticDir
 }
