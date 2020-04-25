@@ -199,6 +199,17 @@ func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abstract
 // No conversion to a vote object is done, it reads the pure strings which then need to be processed further.
 // For an example see ReadMatrixFromCSV, but you probably want your own method for dealing with a parsed CSV
 // file.
+//
+// Furthermore the parser can be configured to read only a certain amount of lines / put restrictions on the records read.
+// This is the same idea as in VotersParser, see there for details of when you would want to use restrictions.
+//
+// The reader returned by NewVotesCSVReader sets all these validation fields to -1, meaning no restrictions.
+//
+// The following restrictions can be configured:
+// MaxNumLines is the number of lines that are allowed in a polls file (including head). Therefor it must be a number >= 1.
+// MaxRecordLength is th maximal length in bytes (not runes) a record in a row is allowed to have.
+// MaxVotersNameLength is the maximal length a voter name is allowed to have.
+// MaxPollNameLengthis the maximal length a poll name is allowed to have.
 type VotesCSVReader struct {
 	Sep                 rune
 	csv                 *csv.Reader
@@ -298,10 +309,17 @@ func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err err
 
 	// for validation we don't use ReadAll but iterate "by hand"
 	lines = make([][]string, 0, defaultVotesSize)
-	lineNum := 0
+	// set to 1 because head has been read already
+	lineNum := 1
+	maxNumLines := r.MaxNumLines
+	// 0 doesn't make sense, we set it to 1
+	if maxNumLines == 0 {
+		maxNumLines = 1
+	}
 	for {
 		lineNum++
-		if r.MaxNumLines >= 0 && lineNum > r.MaxNumLines {
+		// again one here because of head, 0 wouldn't make sense
+		if maxNumLines >= 0 && lineNum > maxNumLines {
 			err = NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in csv file are allowed", r.MaxNumLines))
 			return
 		}

@@ -162,12 +162,12 @@ func isIgnoredLine(line string) bool {
 // votersLineRx is the regex used to parse a voter line, see ParseVotersLine.
 var votersLineRx = regexp.MustCompile(`^\s*[*]\s+(.+?):\s*(\d+)\s*$`)
 
-// VotersParser can be used to parse voters from a file / string.
+// VotersParser parses voters from a file / string.
 // See ParseVotersLine and ParseVoters for details.
 //
 // Furthermore the parser can be configured to read only a certain amount of voters or validate / limit the file.
 // This limit / validation is set via the member variables above. They all default to a value that disables all limits
-// and checks. The default value is -1 for all int types and NoWeight for MaxVotersWeight.
+// and checks in NewVotersParser. The default value is -1 for all int types and NoWeight for MaxVotersWeight.
 //
 // This checking / limitation make it easier to already prevent entries with too many values from parsing. It also
 // gives an easy method to disallow files that are too big from being parsed.
@@ -414,6 +414,27 @@ func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserCon
 	return
 }
 
+// PollCollectionParser parses a poll collection from a file / string.
+// See ParseCollectionSkeletons and ParseCollectionSkeletonsFromString.
+//
+// Furthermore the parser can be configured to read only a certain amount of lines / put restrictions on the polls parsed.
+// This is the same idea as in VotersParser, see there for details of when you would want to use restrictions.
+//
+// A new parser from NewPollCollectionParser sets all values to -1, meaning no restrictions.
+//
+// The following restrictions can be configured:
+// MaxNumLines is the number of lines that are allowed in a polls file.
+// MaxNumPolls is the maximal number of polls allowed in that file.
+// MaxLineLength is the maximal number of bytes (not runes) allowed in a single line of the file.
+// MaxTitleLength is the maximal length the title / heading is allowed to have.
+// MaxGroupNameLength is the maximal length a group is allowed to have.
+// MaxPollNameLength is the maximal length a poll name is allowed to have.
+// MaxNumOptions should be set to at least two, it describes how many options in a basic poll are allowed.
+// MaxOptionLength is the maximal length a single option is allowed to have.
+// MaxCurrencyValue is the maximal currency value (in cents) that is allowed. This can be useful to avoid overflows /
+// database limitations.
+//
+// Again, some combinations would not make sense, like setting MaxNumLines=21 and MaxTitleLength=42.
 type PollCollectionParser struct {
 	MaxNumLines        int
 	MaxNumPolls        int
@@ -426,6 +447,7 @@ type PollCollectionParser struct {
 	MaxCurrencyValue   int
 }
 
+// NewPollCollectionParser returns a new parser with all limitations / restrictions disabled.
 func NewPollCollectionParser() *PollCollectionParser {
 	return &PollCollectionParser{
 		MaxNumLines:        -1,
