@@ -252,6 +252,11 @@ func (poll *SchulzePoll) PollType() string {
 }
 
 // AddVote adds a vote to the poll, the vote must be of type *SchulzeVote.
+//
+// Note that no length check is happening here! I.e. the vote can have a different number of answers than
+// poll.NumOptions.
+// We do this because in general it is also allowed to append any vote, it is the job of the user of this library
+// to deal with invalid votes.
 func (poll *SchulzePoll) AddVote(vote AbstractVote) error {
 	asSchulzeVote, ok := vote.(*SchulzeVote)
 	if !ok {
