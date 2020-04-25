@@ -128,7 +128,7 @@ func (err PollingSemanticError) Unwrap() error {
 }
 
 // ParserValidationError is an error returned if a validation of the input files.
-// Such errors include: invalid utf-8 encoding (see InvalidEncodingError) or a line was longer than allowed.
+// Such errors include: invalid utf-8 encoding (see ErrInvalidEncoding) or a line was longer than allowed.
 type ParserValidationError struct {
 	PollError
 	Message string
@@ -148,8 +148,8 @@ func (err ParserValidationError) Unwrap() error {
 	return nil
 }
 
-// InvalidEncodingError is an error used to signal that an input string is not encoded with valid utf-8.
-var InvalidEncodingError = NewParserValidationError("invalid utf-8 encoding in input")
+// ErrInvalidEncoding is an error used to signal that an input string is not encoded with valid utf-8.
+var ErrInvalidEncoding = NewParserValidationError("invalid utf-8 encoding in input")
 
 ///// PARSERS /////
 
@@ -228,7 +228,7 @@ func (parser *VotersParser) ComputeDefaultMaxLineLength() {
 func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
 	// first validate that s is valid utf-8
 	if !utf8.ValidString(s) {
-		return nil, InvalidEncodingError
+		return nil, ErrInvalidEncoding
 	}
 	// validate length if max line length is set
 	if parser.MaxLineLength >= 0 {
@@ -252,7 +252,7 @@ func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
 	if parser.MaxVotersNameLength >= 0 {
 		nameLength := utf8.RuneCountInString(name)
 		if nameLength > parser.MaxVotersNameLength {
-			return nil, NewParserValidationError(fmt.Sprintf("voter name is too long, got length %d, allowed max length is %d",
+			return nil, NewParserValidationError(fmt.Sprintf("voter name is too long: got length %d, allowed max length is %d",
 				nameLength, parser.MaxVotersNameLength))
 		}
 	}
@@ -445,7 +445,7 @@ func (parser *PollCollectionParser) validateLine(line string, lineNum int) error
 		return NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in polls file are allowed", parser.MaxNumLines))
 	}
 	if !utf8.ValidString(line) {
-		return InvalidEncodingError
+		return ErrInvalidEncoding
 	}
 	if parser.MaxLineLength >= 0 {
 		// check number of bytes here, not number of runes!
@@ -573,7 +573,7 @@ func (parser *PollCollectionParser) ParseCollectionSkeletonsFromString(currencyP
 
 func (parser *PollCollectionParser) validateTitle(title string) error {
 	if parser.MaxTitleLength >= 0 && len(title) > parser.MaxTitleLength {
-		return NewParserValidationError(fmt.Sprintf("title is too long, got length %d, allowed max length is %d",
+		return NewParserValidationError(fmt.Sprintf("title is too long: got length %d, allowed max length is %d",
 			len(title), parser.MaxTitleLength))
 	}
 	return nil
@@ -596,7 +596,7 @@ func (parser *PollCollectionParser) handleHeadState(line string, context *parser
 
 func (parser *PollCollectionParser) validateGroupName(name string) error {
 	if parser.MaxGroupNameLength >= 0 && len(name) > parser.MaxGroupNameLength {
-		return NewParserValidationError(fmt.Sprintf("group name is too long, got length %d, allowed max length is %d",
+		return NewParserValidationError(fmt.Sprintf("group name is too long: got length %d, allowed max length is %d",
 			len(name), parser.MaxGroupNameLength))
 	}
 	return nil
@@ -646,7 +646,7 @@ func (parser *PollCollectionParser) validateNumPolls(numPolls int) error {
 func (parser *PollCollectionParser) validateNewOption(options []string) error {
 	last := options[len(options)-1]
 	if parser.MaxOptionLength >= 0 && len(last) > parser.MaxOptionLength {
-		return NewParserValidationError(fmt.Sprintf("poll option is too long, got length %d, allowed max length is %d",
+		return NewParserValidationError(fmt.Sprintf("poll option is too long: got length %d, allowed max length is %d",
 			len(last), parser.MaxOptionLength))
 	}
 	if parser.MaxNumOptions >= 0 && len(options) > parser.MaxNumOptions {

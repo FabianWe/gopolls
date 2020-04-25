@@ -20,6 +20,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 )
 
 // AbstractVote describes an abstract vote (usually each poll has one vote type).
@@ -199,8 +200,12 @@ func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abstract
 // For an example see ReadMatrixFromCSV, but you probably want your own method for dealing with a parsed CSV
 // file.
 type VotesCSVReader struct {
-	Sep rune
-	csv *csv.Reader
+	Sep                 rune
+	csv                 *csv.Reader
+	MaxNumLines         int
+	MaxVotersNameLength int
+	MaxPollNameLength   int
+	MaxRecordLength     int
 }
 
 // wrapError wraps an error that occurred during reading, if it is a CSV parse error it returns a PollingSyntaxError.
@@ -217,9 +222,26 @@ func (r *VotesCSVReader) wrapError(err error) error {
 func NewVotesCSVReader(r io.Reader) *VotesCSVReader {
 	reader := csv.NewReader(r)
 	return &VotesCSVReader{
-		Sep: DefaultCSVSeparator,
-		csv: reader,
+		Sep:                 DefaultCSVSeparator,
+		csv:                 reader,
+		MaxNumLines:         -1,
+		MaxVotersNameLength: -1,
+		MaxPollNameLength:   -1,
+		MaxRecordLength:     -1,
 	}
+}
+
+func (r *VotesCSVReader) validateRow(row []string) error {
+	for _, entry := range row {
+		if !utf8.ValidString(entry) {
+			return ErrInvalidEncoding
+		}
+		if r.MaxRecordLength >= 0 && len(entry) > r.MaxRecordLength {
+			return NewParserValidationError(fmt.Sprintf("entry in csv is too long: got length %d, allowed max length is %d",
+				len(entry), r.MaxRecordLength))
+		}
+	}
+	return nil
 }
 
 func (r *VotesCSVReader) readHead() ([]string, error) {
@@ -232,6 +254,18 @@ func (r *VotesCSVReader) readHead() ([]string, error) {
 	}
 	if len(res) == 0 {
 		return nil, NewPollingSyntaxError(nil, "expected at least the voter column in csv file")
+	}
+	if validateErr := r.validateRow(res); validateErr != nil {
+		return nil, validateErr
+	}
+	// all poll names must be valid too
+	if r.MaxPollNameLength >= 0 {
+		for _, pollName := range res[1:] {
+			if len(pollName) > r.MaxPollNameLength {
+				return nil, NewParserValidationError(fmt.Sprintf("poll name is too long: got length %d, allowed max length is %d",
+					len(pollName), r.MaxPollNameLength))
+			}
+		}
 	}
 	return res, nil
 }
@@ -247,6 +281,13 @@ func (r *VotesCSVReader) readHead() ([]string, error) {
 // It returns any error reading from the source.
 // It might also return a PollingSyntaxError if the file is not correctly formed.
 func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err error) {
+	// this function only makes sure to return nil, nil if err != nil
+	defer func() {
+		if err != nil {
+			head = nil
+			lines = nil
+		}
+	}()
 	r.csv.Comma = r.Sep
 	head, err = r.readHead()
 	if err != nil {
@@ -254,14 +295,40 @@ func (r *VotesCSVReader) ReadRecords() (head []string, lines [][]string, err err
 	}
 	// note that the first call in read head already makes sure that each line has the exact
 	// same length and that the length is > 0
-	lines, err = r.csv.ReadAll()
-	if err != nil {
-		head = nil
-		lines = nil
-		err = r.wrapError(err)
-	}
 
-	return
+	// for validation we don't use ReadAll but iterate "by hand"
+	lines = make([][]string, 0, defaultVotesSize)
+	lineNum := 0
+	for {
+		lineNum++
+		if r.MaxNumLines >= 0 && lineNum > r.MaxNumLines {
+			err = NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in csv file are allowed", r.MaxNumLines))
+			return
+		}
+		record, recordErr := r.csv.Read()
+		if recordErr == io.EOF {
+			return
+		}
+		if recordErr != nil {
+			err = r.wrapError(recordErr)
+			return
+		}
+
+		if validateRecordErr := r.validateRow(record); validateRecordErr != nil {
+			err = validateRecordErr
+			return
+		}
+
+		// now we must also validate the voter
+		if voterName := record[0]; r.MaxVotersNameLength >= 0 && len(voterName) > r.MaxVotersNameLength {
+			err = NewParserValidationError(fmt.Sprintf("voter name is too long: got length %d, allowed max length is %d",
+				len(voterName), r.MaxVotersNameLength))
+			return
+		}
+
+		// everything fine, append
+		lines = append(lines, record)
+	}
 }
 
 // EmptyVotePolicy describes the behavior if an "empty" vote is found.
