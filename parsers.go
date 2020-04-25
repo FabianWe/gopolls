@@ -386,6 +386,7 @@ type parserContext struct {
 	*PollSkeletonCollection
 	lastPollName   string
 	currencyParser CurrencyParser
+	numSkels       int
 }
 
 func newParserContext(currencyParser CurrencyParser) *parserContext {
@@ -393,6 +394,7 @@ func newParserContext(currencyParser CurrencyParser) *parserContext {
 		PollSkeletonCollection: NewPollSkeletonCollection(""),
 		lastPollName:           "",
 		currencyParser:         currencyParser,
+		numSkels:               0,
 	}
 }
 
@@ -413,24 +415,28 @@ func runSecureStateHandleFunc(f stateHandleFunc, line string, context *parserCon
 }
 
 type PollCollectionParser struct {
-	MaxNumLines       int
-	MaxNumPolls       int
-	MaxLineLength     int
-	MaxPollNameLength int
-	MaxNumOptions     int
-	MaxOptionLength   int
-	MaxCurrencyValue  int
+	MaxNumLines        int
+	MaxNumPolls        int
+	MaxLineLength      int
+	MaxTitleLength     int
+	MaxGroupNameLength int
+	MaxPollNameLength  int
+	MaxNumOptions      int
+	MaxOptionLength    int
+	MaxCurrencyValue   int
 }
 
 func NewPollCollectionParser() *PollCollectionParser {
 	return &PollCollectionParser{
-		MaxNumLines:       -1,
-		MaxNumPolls:       -1,
-		MaxLineLength:     -1,
-		MaxPollNameLength: -1,
-		MaxNumOptions:     -1,
-		MaxOptionLength:   -1,
-		MaxCurrencyValue:  -1,
+		MaxNumLines:        -1,
+		MaxNumPolls:        -1,
+		MaxLineLength:      -1,
+		MaxTitleLength:     -1,
+		MaxGroupNameLength: -1,
+		MaxPollNameLength:  -1,
+		MaxNumOptions:      -1,
+		MaxOptionLength:    -1,
+		MaxCurrencyValue:   -1,
 	}
 }
 
@@ -517,6 +523,17 @@ func (parser *PollCollectionParser) ParseCollectionSkeletons(r io.Reader, curren
 		state = nextState
 	}
 	if scanErr := scanner.Err(); scanErr != nil {
+		// if the error is that th line is too long return it as an validation error
+		if errors.Is(scanErr, bufio.ErrTooLong) {
+			var errString string
+			if parser.MaxLineLength >= 0 {
+				errString = fmt.Sprintf("line is too long: max allowed number of bytes in line is %d",
+					parser.MaxLineLength)
+			} else {
+				errString = "line is too long: max number of bytes is determined by go scanner buffer size (probably 4096)"
+			}
+			return nil, NewParserValidationError(errString)
+		}
 		return nil, scanErr
 	}
 
@@ -554,6 +571,14 @@ func (parser *PollCollectionParser) ParseCollectionSkeletonsFromString(currencyP
 	return parser.ParseCollectionSkeletons(r, currencyParser)
 }
 
+func (parser *PollCollectionParser) validateTitle(title string) error {
+	if parser.MaxTitleLength >= 0 && len(title) > parser.MaxTitleLength {
+		return NewParserValidationError(fmt.Sprintf("title is too long, got length %d, allowed max length is %d",
+			len(title), parser.MaxTitleLength))
+	}
+	return nil
+}
+
 func (parser *PollCollectionParser) handleHeadState(line string, context *parserContext) (parserState, error) {
 	match := headLineRx.FindStringSubmatch(line)
 	if len(match) == 0 {
@@ -563,7 +588,18 @@ func (parser *PollCollectionParser) handleHeadState(line string, context *parser
 		panic("Internal error: Expected that no title was set yet!")
 	}
 	context.Title = match[1]
+	if titleValidationErr := parser.validateTitle(context.Title); titleValidationErr != nil {
+		return invalidState, titleValidationErr
+	}
 	return groupState, nil
+}
+
+func (parser *PollCollectionParser) validateGroupName(name string) error {
+	if parser.MaxGroupNameLength >= 0 && len(name) > parser.MaxGroupNameLength {
+		return NewParserValidationError(fmt.Sprintf("group name is too long, got length %d, allowed max length is %d",
+			len(name), parser.MaxGroupNameLength))
+	}
+	return nil
 }
 
 func (parser *PollCollectionParser) handleGroupState(line string, context *parserContext) (parserState, error) {
@@ -571,9 +607,21 @@ func (parser *PollCollectionParser) handleGroupState(line string, context *parse
 	if len(match) == 0 {
 		return invalidState, NewPollingSyntaxError(nil, "invalid group line, must be of the form \"## <GROUP>\"")
 	}
-	group := NewPollGroup(match[1])
+	groupName := match[1]
+	if groupNameValidationErr := parser.validateGroupName(groupName); groupNameValidationErr != nil {
+		return invalidState, groupNameValidationErr
+	}
+	group := NewPollGroup(groupName)
 	context.Groups = append(context.Groups, group)
 	return pollState, nil
+}
+
+func (parser *PollCollectionParser) validatePollName(name string) error {
+	if parser.MaxPollNameLength >= 0 && len(name) > parser.MaxPollNameLength {
+		return NewParserValidationError(fmt.Sprintf("poll name is too long: got length %d, allowed max length is %d",
+			len(name), parser.MaxPollNameLength))
+	}
+	return nil
 }
 
 func (parser *PollCollectionParser) handlePollState(line string, context *parserContext) (parserState, error) {
@@ -582,7 +630,39 @@ func (parser *PollCollectionParser) handlePollState(line string, context *parser
 		return invalidState, NewPollingSyntaxError(nil, "invalid poll line, must be of the form \"### <POLL>\"")
 	}
 	context.lastPollName = match[1]
+	if nameValidationErr := parser.validatePollName(context.lastPollName); nameValidationErr != nil {
+		return invalidState, nameValidationErr
+	}
 	return optionState, nil
+}
+
+func (parser *PollCollectionParser) validateNumPolls(numPolls int) error {
+	if parser.MaxNumPolls >= 0 && numPolls > parser.MaxNumPolls {
+		return NewParserValidationError(fmt.Sprintf("there are too many polls: only %d polls are allowed", parser.MaxNumPolls))
+	}
+	return nil
+}
+
+func (parser *PollCollectionParser) validateNewOption(options []string) error {
+	last := options[len(options)-1]
+	if parser.MaxOptionLength >= 0 && len(last) > parser.MaxOptionLength {
+		return NewParserValidationError(fmt.Sprintf("poll option is too long, got length %d, allowed max length is %d",
+			len(last), parser.MaxOptionLength))
+	}
+	if parser.MaxNumOptions >= 0 && len(options) > parser.MaxNumOptions {
+		return NewParserValidationError(fmt.Sprintf("there are too many options in a poll: only %d options are allowed",
+			parser.MaxNumOptions))
+	}
+
+	return nil
+}
+
+func (parser *PollCollectionParser) validateMoneyValue(value CurrencyValue) error {
+	if parser.MaxCurrencyValue >= 0 && value.ValueCents > parser.MaxCurrencyValue {
+		return NewParserValidationError(fmt.Sprintf("value for money poll is too big, got %d cents, max allowed cents is %d",
+			value.ValueCents, parser.MaxCurrencyValue))
+	}
+	return nil
 }
 
 func (parser *PollCollectionParser) handleOptionState(line string, context *parserContext) (parserState, error) {
@@ -600,7 +680,14 @@ func (parser *PollCollectionParser) handleOptionState(line string, context *pars
 		// add a new skeleton with this option
 		skeleton := NewPollSkeleton(context.lastPollName)
 		skeleton.Options = append(skeleton.Options, match[1])
+		if validateOptionErr := parser.validateNewOption(skeleton.Options); validateOptionErr != nil {
+			return invalidState, validateOptionErr
+		}
 		group.Skeletons = append(group.Skeletons, skeleton)
+		context.numSkels++
+		if numPollErr := parser.validateNumPolls(context.numSkels); numPollErr != nil {
+			return invalidState, numPollErr
+		}
 		return optionalOptionState, nil
 	case 1:
 		// try to parse currency with parser from context
@@ -613,9 +700,17 @@ func (parser *PollCollectionParser) handleOptionState(line string, context *pars
 		if currency.ValueCents < 0 {
 			return invalidState, NewPollingSemanticError(nil, "string %s describes a negative value, can't be used in a median poll", line)
 		}
+		// validate max value
+		if currencyMaxValidationErr := parser.validateMoneyValue(currency); currencyMaxValidationErr != nil {
+			return invalidState, currencyMaxValidationErr
+		}
 		// add a new skeleton
 		skeleton := NewMoneyPollSkeleton(context.lastPollName, currency)
 		group.Skeletons = append(group.Skeletons, skeleton)
+		context.numSkels++
+		if numPollErr := parser.validateNumPolls(context.numSkels); numPollErr != nil {
+			return invalidState, numPollErr
+		}
 		return groupOrPollState, nil
 	default:
 		panic("Internal error: matchFirst returned an invalid index")
@@ -630,10 +725,20 @@ func (parser *PollCollectionParser) handleGroupOrPollState(line string, context 
 		// success
 		return groupRes, nil
 	}
+	// if it is a validation error: return the validation error and don't try
+	// poll
+	isValidationErrDummy := NewParserValidationError("")
+	if errors.As(groupErr, &isValidationErrDummy) {
+		return invalidState, groupErr
+	}
 	// not a group, then try poll
 	pollRes, pollErr := parser.handlePollState(line, context)
 	if pollErr == nil {
 		return pollRes, nil
+	}
+	// again test for validation error
+	if errors.As(pollErr, &isValidationErrDummy) {
+		return invalidState, pollErr
 	}
 	// both failed, raise an error
 	return invalidState, NewPollingSyntaxError(nil, "expected either group or poll")
@@ -650,6 +755,9 @@ func (parser *PollCollectionParser) handleOptionalOptionState(line string, conte
 		// just append to last poll
 		poll := context.getLastPollGroup().getLastPoll()
 		poll.Options = append(poll.Options, match[1])
+		if validateOptionErr := parser.validateNewOption(poll.Options); validateOptionErr != nil {
+			return invalidState, validateOptionErr
+		}
 		return optionalOptionState, nil
 	}
 	// now it must be group or new poll
@@ -659,5 +767,11 @@ func (parser *PollCollectionParser) handleOptionalOptionState(line string, conte
 		return handleRes, nil
 	}
 	// error
+
+	// again return validation errors unchanged
+	isValidationErrDummy := NewParserValidationError("")
+	if errors.As(handleErr, &isValidationErrDummy) {
+		return invalidState, handleErr
+	}
 	return invalidState, NewPollingSyntaxError(nil, "expected either poll option, group or poll")
 }
