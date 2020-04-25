@@ -25,7 +25,7 @@ func (err internalErrorSentinelType) Error() string {
 }
 
 // ErrPoll is a constant that can be used with a type check.
-// All internal errors (such as syntax error) can be used in a statement like erorrs.Is(err, ErrPoll)
+// All internal errors (such as syntax error) can be used in a statement like errors.Is(err, ErrPoll)
 // and return true.
 // This can be useful when you want to distinguish between an error from gopolls and an "outside" error.
 // If you want to dig deeper, for example find out if an error is a syntax error, you should use
@@ -40,6 +40,6 @@ var ErrPoll = internalErrorSentinelType{}
 type PollError struct{}
 
 // Is returns true if err == ErrPoll.
-func (internal PollError) Is(err error) bool {
+func (pollErr PollError) Is(err error) bool {
 	return err == ErrPoll
 }

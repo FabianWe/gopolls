@@ -267,7 +267,8 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 	defer file.Close()
 
 	// now try to parse from file
-	voters, votersErr := gopolls.ParseVoters(file)
+	votersParser := gopolls.NewVotersParser()
+	voters, votersErr := votersParser.ParseVoters(file)
 
 	if votersErr == nil {
 		// check for duplicate names, if there are any set error to a duplicate error

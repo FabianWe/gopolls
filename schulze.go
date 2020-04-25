@@ -122,7 +122,7 @@ func parseSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 		return r == ',' || r == '/'
 	})
 	if length >= 0 && len(split) != length {
-		return nil, NewPollingSyntaxError(nil, "schulze ranking of length %d was expected, got length %d",
+		return nil, NewPollingSemanticError(nil, "schulze ranking of length %d was expected, got length %d",
 			length, len(split))
 	}
 	res := make(SchulzeRanking, len(split))

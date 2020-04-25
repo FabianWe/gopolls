@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 ///// ERRORS /////
@@ -125,6 +127,30 @@ func (err PollingSemanticError) Unwrap() error {
 	return err.Err
 }
 
+// ParserValidationError is an error returned if a validation of the input files.
+// Such errors include: invalid utf-8 encoding (see InvalidEncodingError) or a line was longer than allowed.
+type ParserValidationError struct {
+	PollError
+	Message string
+}
+
+func NewParserValidationError(msg string) *ParserValidationError {
+	return &ParserValidationError{
+		Message: msg,
+	}
+}
+
+func (err ParserValidationError) Error() string {
+	return "validation of parser input failed: " + err.Message
+}
+
+func (err ParserValidationError) Unwrap() error {
+	return nil
+}
+
+// InvalidEncodingError is an error used to signal that an input string is not encoded with valid utf-8.
+var InvalidEncodingError = NewParserValidationError("invalid utf-8 encoding in input")
+
 ///// PARSERS /////
 
 // isIgnoredLine tests if a line should be ignored during parsing, this happens if the line is empty or starts with #.
@@ -136,11 +162,82 @@ func isIgnoredLine(line string) bool {
 // votersLineRx is the regex used to parse a voter line, see ParseVotersLine.
 var votersLineRx = regexp.MustCompile(`^\s*[*]\s+(.+?):\s*(\d+)\s*$`)
 
+// VotersParser can be used to parse voters from a file / string.
+// See ParseVotersLine and ParseVoters for details.
+//
+// Furthermore the parser can be configured to read only a certain amount of voters or validate / limit the file.
+// This limit / validation is set via the member variables above. They all default to a value that disables all limits
+// and checks. The default value is -1 for all int types and NoWeight for MaxVotersWeight.
+//
+// This checking / limitation make it easier to already prevent entries with too many values from parsing. It also
+// gives an easy method to disallow files that are too big from being parsed.
+// All these validations are indicated by a returned error of type ParserValidationError.
+//
+// The meaning is as follows: MaxNumLines is the number of lines that are allowed in a voters file for ParseVoters.
+// MaxNumVoters is the number of voters that are allowed to be parsed in ParseVoters.
+// Note that we allow comments and empty lines in the file, thus we have one variable for lines and one for voters.
+//
+// MaxLineLength is the maximal number of bytes (not runes) allowed in a single line of the file.
+// MaxVotersNameLength is the maximal number of bytes allowed in a single voters name.
+// MaxVotersWeight is the maximal weight a voter can have, this is useful to for example avoid overflows when you have
+// many voters.
+//
+// However MaxLineLength is probably one of the most useful limits because it finds very long lines early and
+// avoids the parsing of such lines.
+//
+// Of course some combinations don't make sense, for example setting MaxLineLength=21 and MaxVotersNameLength=42
+// will never result in a voter name length > 21.
+//
+// ComputeDefaultMaxLineLength is a small helper that may be called and sets MaxLineLength depending on
+// MaxVotersNameLength and MaxVotersWeight.
+type VotersParser struct {
+	MaxNumLines         int
+	MaxNumVoters        int
+	MaxLineLength       int
+	MaxVotersNameLength int
+	MaxVotersWeight     Weight
+}
+
+// NewVotersParser returns a new parser with all limitations disabled.
+func NewVotersParser() *VotersParser {
+	return &VotersParser{
+		MaxNumLines:         -1,
+		MaxNumVoters:        -1,
+		MaxLineLength:       -1,
+		MaxVotersNameLength: -1,
+		MaxVotersWeight:     NoWeight,
+	}
+}
+
+// ComputeDefaultMaxLineLength sets MaxLineLength depending on the values of MaxVotersNameLength (if set) and
+// MaxVotersWeight.
+// It allows the whitespaces that are required in the description and adds a small constant to allow additional whitespaces,
+// but not too many.
+func (parser *VotersParser) ComputeDefaultMaxLineLength() {
+	if parser.MaxNumLines < 0 {
+		return
+	}
+	parser.MaxLineLength = parser.MaxVotersNameLength + len(strconv.FormatUint(uint64(parser.MaxVotersWeight), 10)) + 4 + 16
+}
+
 // ParseVotersLine parses a voter line.
 //
 // Line must be of the form "* <VOTER-NAME>: <WEIGHT>".
 // The name can consist of arbitrary letters, weight must be a positive integer.
-func ParseVotersLine(s string) (*Voter, error) {
+// The returned error will be of type ParserValidationError or PollingSyntaxError.
+func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
+	// first validate that s is valid utf-8
+	if !utf8.ValidString(s) {
+		return nil, InvalidEncodingError
+	}
+	// validate length if max line length is set
+	if parser.MaxLineLength >= 0 {
+		// check number of bytes here, not number of runes!
+		if len(s) > parser.MaxLineLength {
+			return nil, NewParserValidationError(fmt.Sprintf("line is too long: got line of length %d, allowed max length is %d",
+				len(s), parser.MaxLineLength))
+		}
+	}
 	match := votersLineRx.FindStringSubmatch(s)
 	if len(match) == 0 {
 		return nil, NewPollingSyntaxError(nil, "voter line must be of the form \"* voter: weight\"")
@@ -149,6 +246,20 @@ func ParseVotersLine(s string) (*Voter, error) {
 	weight, weightErr := ParseWeight(weightString)
 	if weightErr != nil {
 		return nil, NewPollingSyntaxError(weightErr, "voter line does not contain a valid integer (got %s)", weightString)
+	}
+
+	// now validate lengths
+	if parser.MaxVotersNameLength >= 0 {
+		nameLength := utf8.RuneCountInString(name)
+		if nameLength > parser.MaxVotersNameLength {
+			return nil, NewParserValidationError(fmt.Sprintf("voter name is too long, got length %d, allowed max length is %d",
+				nameLength, parser.MaxVotersNameLength))
+		}
+	}
+
+	if parser.MaxVotersWeight != NoWeight && weight > parser.MaxVotersWeight {
+		return nil, NewParserValidationError(fmt.Sprintf("voter weight is too big, got %d but max allowed length is %d",
+			weight, parser.MaxVotersWeight))
 	}
 	res := Voter{
 		Name:   name,
@@ -165,35 +276,65 @@ func ParseVotersLine(s string) (*Voter, error) {
 //
 // Empty lines and lines starting with "#" are ignored.
 //
-// This method will return an internal error whenever the syntax / semantics are wrong, all errors from reader
-// are returned directly however.
-func ParseVoters(r io.Reader) ([]*Voter, error) {
+// This method will return an internal error whenever for syntax errors / validation errors, all errors from reader are
+// returned directly however.
+//
+// The returned internals errors are either PollingSyntaxError or ParserValidationError.
+func (parser *VotersParser) ParseVoters(r io.Reader) ([]*Voter, error) {
 	scanner := bufio.NewScanner(r)
+	// if a max length is set create a buffer with that max length
+	if parser.MaxLineLength >= 0 {
+		// set max length of the buffer to that number
+		// the initial size of the buffer will be 4096, but if max length < 4096 we set it to that
+		buffLength := 4096
+		if parser.MaxLineLength < 4096 {
+			buffLength = parser.MaxLineLength
+		}
+		buff := make([]byte, buffLength)
+		scanner.Buffer(buff, parser.MaxLineLength)
+	}
 	lineNum := 0
 	res := make([]*Voter, 0)
 	for scanner.Scan() {
 		lineNum++
+		if parser.MaxNumLines >= 0 && lineNum > parser.MaxNumLines {
+			return nil, NewParserValidationError(fmt.Sprintf("there are too many lines: only %d lines in voters line are allowed", parser.MaxNumLines))
+		}
 		line := scanner.Text()
 		// first test if the line should be ignored
 		if !isIgnoredLine(line) {
 			// should not be ignored, must be a valid voter
-			voter, voterErr := ParseVotersLine(line)
+			voter, voterErr := parser.ParseVotersLine(line)
 			if voterErr != nil {
 				return nil, convertParserErr(voterErr, lineNum)
 			}
 			res = append(res, voter)
+			if parser.MaxNumVoters >= 0 && len(res) > parser.MaxNumVoters {
+				return nil, NewParserValidationError(fmt.Sprintf("there are too many voters: only %d voters are allowed", parser.MaxNumVoters))
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		// if the error is that the line is too long return it as an validation error
+		if errors.Is(err, bufio.ErrTooLong) {
+			var errString string
+			if parser.MaxLineLength >= 0 {
+				errString = fmt.Sprintf("line is too long: max allowed number of bytes in line is %d",
+					parser.MaxLineLength)
+			} else {
+				errString = "line is too long: max number of bytes is determined by go scanner buffer size (probably 4096)"
+			}
+			return nil, NewParserValidationError(errString)
+		}
 		return nil, err
 	}
 	return res, nil
 }
 
 // ParseVotersFromString works like ParseVoters but reads from a string.
-func ParseVotersFromString(s string) ([]*Voter, error) {
+func (parser *VotersParser) ParseVotersFromString(s string) ([]*Voter, error) {
 	reader := strings.NewReader(s)
-	return ParseVoters(reader)
+	return parser.ParseVoters(reader)
 }
 
 // parsing a description
