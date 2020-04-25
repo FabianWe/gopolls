@@ -173,6 +173,11 @@ func (poll *MedianPoll) PollType() string {
 }
 
 // AddVote adds a vote to the poll, the vote must be of type *MedianVote.
+//
+// Note that no vote validation is happening here! I.e. the vote can have an "invalid" value, for example a value that
+// is too large.
+// We do this because in general it is also allowed to append any vote, it is the job of the user of this library
+// to deal with invalid votes.
 func (poll *MedianPoll) AddVote(vote AbstractVote) error {
 	asMedianVote, ok := vote.(*MedianVote)
 	if !ok {

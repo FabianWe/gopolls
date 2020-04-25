@@ -47,6 +47,9 @@ type AbstractPollSkeleton interface {
 	GetName() string
 }
 
+// PollSkeletonMap is a map from a poll name to the poll skeleton with that name.
+type PollSkeletonMap map[string]AbstractPollSkeleton
+
 // DumpAbstractPollSkeleton writes a skeleton description to a writer.
 // It works only with the two "default" implementations.
 //
@@ -239,6 +242,17 @@ func (coll *PollSkeletonCollection) NumSkeletons() int {
 	return res
 }
 
+// HasPolls returns true if there is at least one poll skeleton in any of the groups.
+func (coll *PollSkeletonCollection) HasSkeleton() bool {
+	for _, group := range coll.Groups {
+		if group.NumSkeletons() > 0 {
+			// found at least one
+			return true
+		}
+	}
+	return false
+}
+
 // CollectSkeletons returns a list of all skeletons that appear in any of the groups.
 func (coll *PollSkeletonCollection) CollectSkeletons() []AbstractPollSkeleton {
 	res := make([]AbstractPollSkeleton, 0, len(coll.Groups))
@@ -269,8 +283,8 @@ func (coll *PollSkeletonCollection) HasDuplicateSkeleton() (string, bool) {
 // If it finds any duplicate names an error of type DuplicateError is returned together with nil.
 //
 // Otherwise it returns the map and nil.
-func (coll *PollSkeletonCollection) SkeletonsToMap() (map[string]AbstractPollSkeleton, error) {
-	res := make(map[string]AbstractPollSkeleton, len(coll.Groups))
+func (coll *PollSkeletonCollection) SkeletonsToMap() (PollSkeletonMap, error) {
+	res := make(PollSkeletonMap, len(coll.Groups))
 	for _, group := range coll.Groups {
 		for _, skel := range group.Skeletons {
 			name := skel.GetName()

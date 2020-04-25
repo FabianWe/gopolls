@@ -59,10 +59,13 @@ func HasDuplicateVoters(voters []*Voter) (string, bool) {
 	return "", false
 }
 
+// VoterMap is a mapping from user name to a Voter.
+type VoterMap map[string]*Voter
+
 // VotersToMap returns a map from voter name to voter object.
 // If it finds a a duplicate in the names of voters it returns nil and a DuplicateError.
-func VotersToMap(voters []*Voter) (map[string]*Voter, error) {
-	res := make(map[string]*Voter, len(voters))
+func VotersToMap(voters []*Voter) (VoterMap, error) {
+	res := make(VoterMap, len(voters))
 	for _, voter := range voters {
 		if _, has := res[voter.Name]; has {
 			return nil, NewDuplicateError(fmt.Sprintf("duplicate entry for user %s", voter.Name))

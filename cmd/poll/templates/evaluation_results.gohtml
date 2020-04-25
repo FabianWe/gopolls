@@ -14,16 +14,131 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */ -}}
 
-{{define "basic_poll"}}
-    <h4>{{.PollSkel.GetName}}</h4>
+{{define "basicpoll"}}
+    <h4>{{.Skel.GetName}}</h4>
+    <p>
+        Number of voters: {{.Result.VotersCount}}<br/>
+        Weight sum of voters: {{.Result.VotesSum}}
+    </p>
 
+    <table class="pure-table">
+        <thead>
+        <tr>
+            <th>Option</th>
+            <th># Votes</th>
+            <th>% Votes</th>
+            <th>&Sigma; Weight</th>
+            <th>% Weight</th>
+        </tr>
+        </thead>
+        <tr>
+            <td>Yes</td>
+            <td>{{.Result.NumberVoters.NumAyes}}</td>
+            <td>{{percentage .Result.NumberVoters.NumAyes .Result.VotersCount}}</td>
+            <td>{{.Result.WeightedVotes.NumAyes}}</td>
+            <td>{{percentage .Result.WeightedVotes.NumAyes .Result.VotesSum}}</td>
+        </tr>
+        <tr>
+            <td>No</td>
+            <td>{{.Result.NumberVoters.NumNoes}}</td>
+            <td>{{percentage .Result.NumberVoters.NumNoes .Result.VotersCount}}</td>
+            <td>{{.Result.WeightedVotes.NumNoes}}</td>
+            <td>{{percentage .Result.WeightedVotes.NumNoes .Result.VotesSum}}</td>
+        </tr>
+        <tr>
+            <td>Abstention</td>
+            <td>{{.Result.NumberVoters.NumAbstention}}</td>
+            <td>{{percentage .Result.NumberVoters.NumAbstention .Result.VotersCount}}</td>
+            <td>{{.Result.WeightedVotes.NumAbstention}}</td>
+            <td>{{percentage .Result.WeightedVotes.NumAbstention .Result.VotesSum}}</td>
+        </tr>
+    </table>
+{{end}}
+
+{{define "medianpoll"}}
+    <h4>{{.Skel.GetName}}</h4>
+    <p>
+        Number of voters: {{len .Poll.Votes}}<br/>
+        Weight sum of voters: {{.Result.WeightSum}}<br/>
+        Required majority: &gt; {{.Result.RequiredMajority}}<br/>
+    </p>
+    <table class="pure-table">
+        <thead>
+        <tr>
+            <th>Amount requested</th>
+            <th>Amount authorized</th>
+        </tr>
+        </thead>
+        <tr>
+            <td>{{formatMedianToCurrency .Poll.Value}}</td>
+            <td>{{formatMedianToCurrency .Result.MajorityValue}}</td>
+        </tr>
+    </table>
+{{end}}
+
+{{define "schulzepoll"}}
+    <h4>{{.Skel.GetName}}</h4>
+    Number of voters: {{len .Poll.Votes}}<br/>
+    Weight sum of voters: {{.Result.WeightSum}}<br/>
+    Options for the poll are:
+    <ul>
+        {{range $option := .Skel.Options}}
+            <li>{{$option}}</li>
+        {{end}}
+    </ul>
+    {{$leNo := .Result.StrictlyBetterThanNo}}
+    {{$leqNo := .Result.BetterOrEqualNo}}
+    <table class="pure-table">
+        <thead>
+        <tr>
+            <th>Group / Option</th>
+            <th># Better No (&lt; No)</th>
+            <th># Better or equal No (&#8804; No)</th>
+        </tr>
+        </thead>
+        {{range $groupNum, $rankingGroup := .Result.RankedGroups}}
+            <tr class="pure-table-odd">
+                <td colspan="3">
+                    Group {{$groupNum}}
+                </td>
+            </tr>
+            {{range $optionID := $rankingGroup}}
+                <tr>
+                    <td>
+                        {{index $.Skel.Options $optionID}}
+                    </td>
+                    <td>
+                        {{index $leNo $optionID}}
+                    </td>
+                    <td>
+                        {{index $leqNo $optionID}}
+                    </td>
+                </tr>
+            {{end}}
+        {{end}}
+    </table>
 {{end}}
 
 {{block "content" .}}
-    <h2 class="content-subhead">Evaluation Results</h2>
+    <h2 class="content-subhead">Evaluation Results for {{.AdditionalData.title}}</h2>
 
-    Displaying results! Yeah! File is {{.AdditionalData.source_file_name}}
-    {{template "bascic_poll"}}
+    Displaying results for file {{.AdditionalData.source_file_name}}
     <br/>
-    {{template "basic_poll"}}
+
+    {{range $group := .AdditionalData.results}}
+        <h3>{{$group.Title}}</h3>
+        {{range $pollEntry := $group.Polls}}
+            {{$pollTypeStr := $pollEntry.Poll.PollType}}
+            {{if eq "basic-poll" $pollTypeStr}}
+                {{template "basicpoll" $pollEntry}}
+            {{else if eq "median-poll" $pollTypeStr}}
+                {{template "medianpoll" $pollEntry}}
+            {{else if eq "schulze-poll" $pollTypeStr}}
+                {{template "schulzepoll" $pollEntry}}
+            {{else}}
+                Unknown poll type {{$pollEntry.Poll.PollType}}
+            {{end}}
+        {{end}}
+    {{end}}
+
 {{end}}

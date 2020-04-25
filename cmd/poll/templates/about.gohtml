@@ -1,0 +1,64 @@
+{{- /*
+Copyright 2020 Fabian Wenzelmann <fabianwen@posteo.eu>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/ -}}
+
+{{block "content" .}}
+    <h2 class="content-subhead">About</h2>
+    This tool is just a simple demonstration of the gopolls library.
+    It allows you to parse voters, polls and evaluate the results.
+    See the <a href="https://github.com/FabianWe/gopolls">project homepage on github</a> and the <a
+            href="https://github.com/FabianWe/gopolls/wiki">Wiki</a>
+    for more details.
+
+    <p>
+        Note that this tool should not be used anywhere in a live environment, the implementation is not really for
+        distribution, it's just a demonstration!
+    </p>
+
+    <h3 class="content-subhead">Version</h3>
+    gopoll version {{.AdditionalData.version}}, Go version {{.AdditionalData.go_version}}.
+
+    <h3 class="content-subhead">License</h3>
+    Copyright &copy; 2020 Fabian Wenzelmann fabianwen@posteo.eu
+
+    <p>
+        Licensed under the Apache License, Version 2.0 (the "License");
+        you may not use this file except in compliance with the License.
+        You may obtain a copy of the License at
+    </p>
+
+    <p>
+        <a href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a>
+    </p>
+
+    <p>
+        Unless required by applicable law or agreed to in writing, software
+        distributed under the License is distributed on an "AS IS" BASIS,
+        WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+        See the License for the specific language governing permissions and
+        limitations under the License.
+    </p>
+
+    <h4 class="content-subhead">Third-Party Licenses</h4>
+    This tool is built with only the <a href="https://golang.org/">Golang</a> standard library.
+    It uses however <a href="https://purecss.io/">pure-css</a> (contained in the distributions of this tool).
+    pure-css is licensed under the <a href="https://github.com/pure-css/pure-site/blob/master/LICENSE.md">Yahoo BSD
+        License</a>.
+
+    <p>
+        It also uses a template from the <a href="https://purecss.io/layouts/">pure-css Layouts page</a> (also contained
+        in this distribution).
+    </p>
+{{end}}

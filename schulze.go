@@ -101,8 +101,23 @@ func NewSchulzeAye(numOptions int) SchulzeRanking {
 	return res
 }
 
+// IsAbstention returns true if all options are ranked with exactly the same number.
+func (ranking SchulzeRanking) IsAbstention() bool {
+	if len(ranking) == 0 {
+		// not a really useful case
+		return true
+	}
+	first := ranking[0]
+	for _, element := range ranking[1:] {
+		if element != first {
+			return false
+		}
+	}
+	return true
+}
+
 // private because from outside the parser implementing the parser interface should be used
-func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
+func parseSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 	split := strings.FieldsFunc(s, func(r rune) bool {
 		return r == ',' || r == '/'
 	})
@@ -115,7 +130,7 @@ func parserSchulzeRanking(s string, length int) (SchulzeRanking, error) {
 		asString = strings.TrimSpace(asString)
 		asInt, intErr := strconv.Atoi(asString)
 		if intErr != nil {
-			return nil, NewPollingSyntaxError(intErr, "can't parse schulze ranking")
+			return nil, NewPollingSyntaxError(intErr, "can't parse schulze ranking, invalid ranking string")
 		}
 		res[i] = asInt
 	}
@@ -151,11 +166,11 @@ type SchulzeVoteParser struct {
 	Length int
 }
 
-// NewSchuleVoteParser returns a new SchulzeVoteParser.
+// NewSchulzeVoteParser returns a new SchulzeVoteParser.
 //
 // The length argument is allowed to be negative in which case the length check is disabled.
 // Set it to a length >= 0 to enable the check or use WithLength.
-func NewSchuleVoteParser(length int) *SchulzeVoteParser {
+func NewSchulzeVoteParser(length int) *SchulzeVoteParser {
 	return &SchulzeVoteParser{Length: length}
 }
 
@@ -176,7 +191,7 @@ func (parser *SchulzeVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCust
 
 // ParseFromString implements the VoteParser interface, for details see type description.
 func (parser *SchulzeVoteParser) ParseFromString(s string, voter *Voter) (AbstractVote, error) {
-	ranking, err := parserSchulzeRanking(s, parser.Length)
+	ranking, err := parseSchulzeRanking(s, parser.Length)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +252,11 @@ func (poll *SchulzePoll) PollType() string {
 }
 
 // AddVote adds a vote to the poll, the vote must be of type *SchulzeVote.
+//
+// Note that no length check is happening here! I.e. the vote can have a different number of answers than
+// poll.NumOptions.
+// We do this because in general it is also allowed to append any vote, it is the job of the user of this library
+// to deal with invalid votes.
 func (poll *SchulzePoll) AddVote(vote AbstractVote) error {
 	asSchulzeVote, ok := vote.(*SchulzeVote)
 	if !ok {
@@ -399,12 +419,12 @@ func (poll *SchulzePoll) rankP(p SchulzeMatrix) SchulzeWinsList {
 // (or weights) strictly preferred i to j it counts how many voters preferred i to j or ranked them equally
 // (ranking[i] < ranking[j] vs ranking[i] <= ranking[j]).
 //
-// VotesSum is the sum of the weights of all votes in the poll.
+// WeightSum is the sum of the weights of all votes in the poll.
 type SchulzeResult struct {
 	D, P         SchulzeMatrix
 	DNonStrict   SchulzeMatrix
 	RankedGroups SchulzeWinsList
-	VotesSum     Weight
+	WeightSum    Weight
 }
 
 // NewSchulzeResult returns a new SchulzeResult.
@@ -414,7 +434,7 @@ func NewSchulzeResult(d, dNonStrict, p SchulzeMatrix, rankedGroups SchulzeWinsLi
 		DNonStrict:   dNonStrict,
 		P:            p,
 		RankedGroups: rankedGroups,
-		VotesSum:     votesSum,
+		WeightSum:    votesSum,
 	}
 }
 

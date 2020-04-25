@@ -40,6 +40,7 @@ var currencyHandler = gopolls.SimpleEuroHandler{}
 // should be fine enough in this main file
 var templateRoot string
 var staticRoot string
+var comma rune
 
 type mainContext struct {
 	Voters         []*gopolls.Voter
@@ -138,6 +139,16 @@ func baseTemplates() *template.Template {
 		"inc": func(i int) int {
 			return i + 1
 		},
+		"formatMedianToCurrency": func(val gopolls.MedianUnit) string {
+			var asCurrency gopolls.CurrencyValue
+			if val == gopolls.NoMedianUnitValue {
+				asCurrency = gopolls.NewCurrencyValue(0, "€")
+			} else {
+				asCurrency = gopolls.NewCurrencyValue(int(val), "€")
+			}
+
+			return currencyHandler.Format(asCurrency)
+		},
 		"formatCurrency": func(val gopolls.CurrencyValue) string {
 			return currencyHandler.Format(val)
 		},
@@ -203,6 +214,22 @@ func (h *mainHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.R
 	return executeTemplate(h.template, renderContext, buff)
 }
 
+type aboutHandler struct {
+	template *template.Template
+}
+
+func newAboutHandler(base *template.Template) *aboutHandler {
+	t := readTemplate(base, "about.gohtml")
+	return &aboutHandler{t}
+}
+
+func (h *aboutHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
+	renderContext := newRenderContext(context)
+	renderContext.AdditionalData["version"] = version
+	renderContext.AdditionalData["go_version"] = runtime.Version()
+	return executeTemplate(h.template, renderContext, buff)
+}
+
 type votersHandler struct {
 	template *template.Template
 }
@@ -254,7 +281,7 @@ func (h *votersHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http
 		context.Voters = voters
 		context.VotersSourceFileName = handler.Filename
 		log.Printf("Successfuly parsed %d voters from %s\n", len(voters), handler.Filename)
-		res := newRedirectHandlerRes(http.StatusFound, "./")
+		res := newRedirectHandlerRes(http.StatusFound, "/voters")
 		return res
 	}
 
@@ -319,7 +346,7 @@ func (h *pollsHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.
 		context.PollCollection = collection
 		context.CollectionSourceFileName = handler.Filename
 		log.Printf("Successfuly parsed %d polls from %s\n", collection.NumSkeletons(), handler.Filename)
-		res := newRedirectHandlerRes(http.StatusFound, "./")
+		res := newRedirectHandlerRes(http.StatusFound, "/polls")
 		return res
 	}
 
@@ -365,7 +392,7 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 		return render(nil)
 	}
 
-	if len(context.Voters) == 0 || context.PollCollection.NumSkeletons() == 0 {
+	if len(context.Voters) == 0 || !context.PollCollection.HasSkeleton() {
 		// not really nice but well
 		return render(gopolls.NewPollingSemanticError(nil, "no voters / polls have been uploaded yet"))
 	}
@@ -383,34 +410,43 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 
 	// try to parse the matrix
 	csvReader := gopolls.NewVotesCSVReader(file)
-	csvReader.Sep = ';'
-	matrix, matrixErr := gopolls.NewVotersMatrixFromCSV(csvReader, context.Voters, context.PollCollection)
+	csvReader.Sep = comma
+	matrix, matrixErr := gopolls.ReadMatrixFromCSV(csvReader)
 	if matrixErr != nil {
 		return render(matrixErr)
 	}
+	votersMap, votersMapErr := gopolls.VotersToMap(context.Voters)
+	if votersMapErr != nil {
+		return render(votersMapErr)
+	}
 
-	// matrix has been parsed, so now try to parse the votes from it
-	polls, pollsErr := gopolls.ConvertSkeletonsToPolls(matrix.Polls,
+	pollsMap, pollsMapErr := context.PollCollection.SkeletonsToMap()
+	if pollsMapErr != nil {
+		return render(pollsMapErr)
+	}
+
+	polls, pollsErr := gopolls.ConvertSkeletonMapToEmptyPolls(pollsMap,
 		gopolls.DefaultSkeletonConverter)
 	if pollsErr != nil {
 		return render(pollsErr)
 	}
 
 	// next try to parse the results, first generate the parsers
-	parsers, parsersErr := gopolls.CustomizeParsers(polls, gopolls.DefaultParserTemplateMap)
+	parsers, parsersErr := gopolls.CustomizeParsersToMap(polls, gopolls.DefaultParserTemplateMap)
 	if parsersErr != nil {
 		return render(parsersErr)
 	}
 
 	// parsers are of type ParserCustomizer, we need type VoteParser (this is actually a sub type)
-	parsersCasted := make([]gopolls.VoteParser, len(parsers))
-	for i, p := range parsers {
-		parsersCasted[i] = p
+	parsersCasted := make(map[string]gopolls.VoteParser, len(parsers))
+	for name, p := range parsers {
+		parsersCasted[name] = p
 	}
 
 	// now add all votes
-	policies := gopolls.GeneratePoliciesList(gopolls.IgnoreEmptyVote, len(polls))
-	votesErr := matrix.FillVotesFromMatrix(polls, parsersCasted, policies)
+	policies := gopolls.GeneratePoliciesMap(gopolls.IgnoreEmptyVote, polls)
+	_, _, votesErr := matrix.FillPollsWithVotes(polls, votersMap, parsersCasted, policies,
+		true, false)
 	if votesErr != nil {
 		return render(votesErr)
 	}
@@ -434,9 +470,29 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	}
 	type templateGroup struct {
 		Title string
-		Polls []templatePollEntry
+		Polls []*templatePollEntry
 	}
-	// now use the original collection to
+
+	results := make([]*templateGroup, context.PollCollection.NumGroups())
+
+	for i, group := range context.PollCollection.Groups {
+		templateGroup := &templateGroup{
+			Title: group.Title,
+			Polls: make([]*templatePollEntry, group.NumSkeletons()),
+		}
+		results[i] = templateGroup
+		for j, pollSkell := range group.Skeletons {
+			name := pollSkell.GetName()
+			templateGroup.Polls[j] = &templatePollEntry{
+				Skel:   pollSkell,
+				Poll:   polls[name],
+				Result: tallied[name],
+			}
+		}
+	}
+
+	renderContext.AdditionalData["results"] = results
+
 	return executeTemplate(h.evaluationResultsTemplate, renderContext, buff)
 }
 
@@ -448,7 +504,7 @@ func newExportCSVTemplateHandler() exportCSVTemplateHandler {
 
 func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffer, r *http.Request) handlerRes {
 	csvWriter := gopolls.NewVotesCSVWriter(buff)
-	csvWriter.Sep = ';'
+	csvWriter.Sep = comma
 	// write empty template
 	writeErr := csvWriter.GenerateEmptyTemplate(context.Voters, context.PollCollection.CollectSkeletons())
 	if writeErr != nil {
@@ -460,21 +516,21 @@ func (h exportCSVTemplateHandler) Handle(context *mainContext, buff *bytes.Buffe
 	return res
 }
 
-func evaluatePolls(polls []gopolls.AbstractPoll) ([]interface{}, error) {
-	res := make([]interface{}, len(polls))
+func evaluatePolls(polls gopolls.PollMap) (map[string]interface{}, error) {
+	res := make(map[string]interface{}, len(polls))
 
 	// type used for the channel to communicate
 	type pollRes struct {
-		index int
-		res   interface{}
-		err   error
+		pollName string
+		res      interface{}
+		err      error
 	}
 
 	ch := make(chan pollRes, 1)
 
 	// evaluate each poll
-	for i, p := range polls {
-		go func(index int, poll gopolls.AbstractPoll) {
+	for pollName, p := range polls {
+		go func(name string, poll gopolls.AbstractPoll) {
 			var evaluated interface{}
 			var pollErr error
 			switch typedPoll := poll.(type) {
@@ -500,23 +556,21 @@ func evaluatePolls(polls []gopolls.AbstractPoll) ([]interface{}, error) {
 				pollErr = fmt.Errorf("unsupported poll type %s", reflect.TypeOf(poll))
 			}
 			ch <- pollRes{
-				index: index,
-				res:   evaluated,
-				err:   pollErr,
+				pollName: name,
+				res:      evaluated,
+				err:      pollErr,
 			}
-		}(i, p)
+		}(pollName, p)
 	}
 
 	var err error
-	smallestPollIndex := -1
 
 	for i := 0; i < len(polls); i++ {
 		pollRes := <-ch
-		if pollRes.err != nil && (smallestPollIndex < 0 || pollRes.index < smallestPollIndex) {
+		if err == nil && pollRes.err != nil {
 			err = pollRes.err
-			smallestPollIndex = pollRes.index
 		}
-		res[pollRes.index] = pollRes.res
+		res[pollRes.pollName] = pollRes.res
 	}
 
 	if err != nil {
@@ -535,18 +589,21 @@ func main() {
 	context := mainContext{}
 	context.PollCollection = gopolls.NewPollSkeletonCollection("dummy")
 	mainH := newMainHandler(base)
+	aboutH := newAboutHandler(base)
 	votersH := newVotersHandler(base)
 	pollsH := newPollsHandler(base)
 	csvH := newExportCSVTemplateHandler()
 	evaluateH := newEvaluationHandler(base)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(staticRoot))))
-	http.HandleFunc("/voters/", toHandleFunc(votersH, &context))
-	http.HandleFunc("/polls/", toHandleFunc(pollsH, &context))
-	http.HandleFunc("/votes/csv/", toHandleFunc(csvH, &context))
-	http.HandleFunc("/evaluate/", toHandleFunc(evaluateH, &context))
-	http.HandleFunc("/", toHandleFunc(mainH, &context))
+	http.HandleFunc("/voters", toHandleFunc(votersH, &context))
+	http.HandleFunc("/polls", toHandleFunc(pollsH, &context))
+	http.HandleFunc("/votes/csv", toHandleFunc(csvH, &context))
+	http.HandleFunc("/evaluate", toHandleFunc(evaluateH, &context))
+	http.HandleFunc("/home", toHandleFunc(mainH, &context))
+	http.HandleFunc("/about", toHandleFunc(aboutH, &context))
 	addr := "localhost:8080"
 	log.Printf("Running server on %s\n", addr)
+	fmt.Printf("Visit http://%s/home in your browser\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
@@ -600,6 +657,8 @@ func printAbout() {
 func parseArgs() {
 	var rootString string
 	flag.StringVar(&rootString, "assets", "", "Directory in which the assets (templates and static) are, defaults to dir of executable")
+	var commaVar string
+	flag.StringVar(&commaVar, "comma", ";", "Comma separator for csv files, for historical reasons defaults to \";\"")
 	// test if help was given
 	if len(os.Args) > 1 && os.Args[1] == "help" {
 		printUsage()
@@ -632,6 +691,11 @@ func parseArgs() {
 		log.Fatalf("static directory does not exist, assumed it to be at %s", templateDir)
 	}
 
+	commaRunes := []rune(commaVar)
+	if len(commaRunes) != 1 {
+		log.Fatalf("comma separator must be a single character, got \"%s\"\n", commaVar)
+	}
+	comma = commaRunes[0]
 	templateRoot = templateDir
 	staticRoot = staticDir
 }

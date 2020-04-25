@@ -150,7 +150,7 @@ func (parser *BasicVoteParser) basicStyle(s string, voter *Voter) (*BasicVote, b
 }
 
 func (parser *BasicVoteParser) rankingStyle(s string, voter *Voter) (*BasicVote, bool) {
-	ranking, rankingErr := parserSchulzeRanking(s, 2)
+	ranking, rankingErr := parseSchulzeRanking(s, 2)
 	if rankingErr != nil {
 		return nil, false
 	}
@@ -329,10 +329,11 @@ func (counter *BasicPollCounter) Equals(other *BasicPollCounter) bool {
 // WeightedVotes counts how often an answer was taken, by summing up not the number of voters but the weight of
 // these voters.
 //
-// VotesSum is the sum of the weights of all votes in the poll.
+// WeightSum is the sum of the weights of all votes in the poll, VotersCount the number of voters (as a weight).
 type BasicPollResult struct {
 	NumberVoters  *BasicPollCounter
 	WeightedVotes *BasicPollCounter
+	VotersCount   Weight
 	VotesSum      Weight
 }
 
@@ -341,6 +342,7 @@ func NewBasicPollResult() *BasicPollResult {
 	return &BasicPollResult{
 		NumberVoters:  NewBasicPollCounter(),
 		WeightedVotes: NewBasicPollCounter(),
+		VotersCount:   0,
 		VotesSum:      0,
 	}
 }
@@ -348,6 +350,7 @@ func NewBasicPollResult() *BasicPollResult {
 func (res *BasicPollResult) increaseCounters(vote *BasicVote) {
 	res.NumberVoters.Increase(vote.Choice, 1)
 	res.WeightedVotes.Increase(vote.Choice, vote.Voter.Weight)
+	res.VotersCount += 1
 	res.VotesSum += vote.Voter.Weight
 }
 

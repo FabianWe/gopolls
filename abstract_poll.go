@@ -37,6 +37,9 @@ type AbstractPoll interface {
 	AddVote(vote AbstractVote) error
 }
 
+// PollMap is a mapping from poll name to the poll with that name.
+type PollMap map[string]AbstractPoll
+
 const (
 	MedianPollType  = "median-poll"
 	SchulzePollType = "schulze-poll"
@@ -60,6 +63,19 @@ func NewPollTypeError(msg string, a ...interface{}) PollTypeError {
 
 func (err PollTypeError) Error() string {
 	return err.Msg
+}
+
+// VoteGenerator is used to describe polls that can produce a poll specific vote type for a basic answer
+// (yes, no or abstention).
+//
+// It is not allowed to return a nil vote and error = nil, that is if there is no error the returned
+// vote is not allowed to be nil.
+//
+// It should return a PollTypeError if an answer is not supported (or none at all).
+// All polls implemented at the moment also implement this interface.
+type VoteGenerator interface {
+	AbstractPoll
+	GenerateVoteFromBasicAnswer(voter *Voter, answer BasicPollAnswer) (AbstractVote, error)
 }
 
 // SkeletonConverter is a function that takes a skeleton and returns an empty poll for this skeleton.
@@ -130,8 +146,10 @@ func detaultSkeletonConverterGenerator(convertToBasic bool, skel AbstractPollSke
 
 // ConvertSkeletonsToPolls does the translation from a list of skeletons to a list of (empty) polls.
 // It uses a SkeletonConverter function to do the actual conversion and returns an error if any of the skeletons
-// in the list is not valid.
+// in the list is not "valid".
 // If converterFunction is nil DefaultSkeletonConverter is used.
+//
+// ConvertSkeletonsToPolls is a function that does the same for maps.
 func ConvertSkeletonsToPolls(skeletons []AbstractPollSkeleton, converterFunction SkeletonConverter) ([]AbstractPoll, error) {
 	if converterFunction == nil {
 		converterFunction = DefaultSkeletonConverter
@@ -144,6 +162,29 @@ func ConvertSkeletonsToPolls(skeletons []AbstractPollSkeleton, converterFunction
 			return nil, pollErr
 		}
 		res[i] = emptyPoll
+	}
+
+	return res, nil
+}
+
+// ConvertSkeletonMapToEmptyPolls does the translation from a skeleton mapping to a map of (empty) polls.
+// It uses a SkeletonConverter function to do the actual conversion and returns an error if any of the skeletons
+// in the map is not "valid".
+// If converterFunction is nil DefaultSkeletonConverter is used.
+//
+// ConvertSkeletonsToPolls is a function that does the same for lists.
+func ConvertSkeletonMapToEmptyPolls(skeletons PollSkeletonMap, converterFunction SkeletonConverter) (PollMap, error) {
+	if converterFunction == nil {
+		converterFunction = DefaultSkeletonConverter
+	}
+	res := make(PollMap, len(skeletons))
+
+	for name, skeleton := range skeletons {
+		emptyPoll, pollErr := converterFunction(skeleton)
+		if pollErr != nil {
+			return nil, pollErr
+		}
+		res[name] = emptyPoll
 	}
 
 	return res, nil
