@@ -39,7 +39,7 @@ const (
 // VoteParser parses a vote from a string.
 //
 // Returned errors should be an internal error type like PollingSyntaxError or PollingSemanticError.
-// If the error is not nil the returned vote is not allowed to be nil
+// If the error is not nil the returned vote is not allowed to be nil.
 //
 // It is recommended to also implement ParserCustomizer.
 type VoteParser interface {
@@ -66,7 +66,7 @@ type ParserCustomizer interface {
 }
 
 // DefaultParserTemplateMap contains default templates for BasicPollType, MedianPollType and SchulzePollType.
-// Of course it could be extended by other init functions.
+// Of course it can be extended.
 var DefaultParserTemplateMap = make(map[string]ParserCustomizer, 3)
 
 // init adds default templates
@@ -196,8 +196,8 @@ func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abstract
 // VotesCSVReader can be used to parse a CSV file of votes (see wiki for details about CSV files).
 // It can only be used to parse the "matrix", that is the strings from the CSV file.
 // No conversion to a vote object is done, it reads the pure strings which then need to be processed further.
-// For an example see NewVotersMatrixFromCSV, but you probably want your own method for dealing with parsed CSV
-// files.
+// For an example see ReadMatrixFromCSV, but you probably want your own method for dealing with parsed CSV
+// file.
 type VotesCSVReader struct {
 	Sep rune
 	csv *csv.Reader
@@ -293,6 +293,7 @@ const (
 
 // GeneratePoliciesList is just a small helper function that returns a list of num elements, each entry is
 // set to the given policy.
+// GeneratePoliciesMap does the same for a map.
 func GeneratePoliciesList(policy EmptyVotePolicy, num int) []EmptyVotePolicy {
 	res := make([]EmptyVotePolicy, num)
 	for i := 0; i < num; i++ {
@@ -304,7 +305,7 @@ func GeneratePoliciesList(policy EmptyVotePolicy, num int) []EmptyVotePolicy {
 // PolicyMap defines a mapping from poll name to an empty vote policy.
 type PolicyMap map[string]EmptyVotePolicy
 
-// GeneratePoliciesMap is just a small helper function that returns a Policymap for all polls in the given map.
+// GeneratePoliciesMap is just a small helper function that returns a PolicyMap for all polls in the given map.
 // The map returned maps each poll name to the given policy.
 func GeneratePoliciesMap(policy EmptyVotePolicy, polls PollMap) PolicyMap {
 	res := make(PolicyMap, len(polls))
@@ -362,11 +363,22 @@ func (policy EmptyVotePolicy) GenerateEmptyVoteForVoter(voter *Voter, poll Abstr
 	}
 }
 
+// PollMatrix describes the contents of data as from a VotesCSVReader.
+//
+// The implementation might be more specific to fit my needs, but I think it could be re-used by other projects and
+// in anyway demonstrates how the library is constructed and all methods can be combined.
+//
+// In general the csv file only contains names for voters and polls, these usually should be matched against an
+// existing collection of voters / polls.
+//
+// This type gives you methods to help to deal with this content:
+// ReadMatrixFromCSV just creates the matrix from a reader.
 type PollMatrix struct {
 	Head []string
 	Body [][]string
 }
 
+// ReadMatrixFromCSV creates a matrix and reads the content from the csv reader.
 func ReadMatrixFromCSV(r *VotesCSVReader) (*PollMatrix, error) {
 	head, body, err := r.ReadRecords()
 
@@ -380,6 +392,28 @@ func ReadMatrixFromCSV(r *VotesCSVReader) (*PollMatrix, error) {
 	return &m, nil
 }
 
+// MatchEntries tests if the matrix is well-formed.
+//
+// The maps voters and polls are maps that specify the allowed names / voter names.
+//
+// By we-formed we mean: The matrix must have at least one column, it is contains the voters in the first row and
+// each row describes a poll, thus each line in the body is of the form [voter, poll1, ..., pollN].
+// If the matrix does not have this form a PollingSemanticError is returned.
+//
+// Each voter in any of the rows must be contained in the given voters map, otherwise PollingSemanticError error is
+// returned.
+// Each poll (given in the head columns [1:]) must exist in the polls map, otherwise a PollingSemanticError is returned.
+// Also there are no duplicates allowed in the voter names and column names, if a duplicate is found a DuplicateError
+// is returned.
+//
+// Note that it is allowed that a voter is missing, i.e. not contained in the CSV. The same is true for polls, not each
+// poll must be contained.
+// That's why this method returns two maps, they contain the voters and polls that were actually found.
+// If you want to make sure that each voter / poll is contained in the csv just compare the lengths of the original
+// map and the matched map.
+//
+// This function will do no parsing, i.e. creating actual votes from the entries in the csv. You can use
+// FillPollsWithVotes for that.
 func (m *PollMatrix) MatchEntries(voters VoterMap, polls PollMap) (matchedVoters VoterMap, matchedPolls PollMap, err error) {
 	matchedVoters = make(VoterMap, len(voters))
 	matchedPolls = make(PollMap, len(polls))
@@ -516,6 +550,30 @@ func (m *PollMatrix) fillAllPolls(voters VoterMap, polls PollMap, parsers map[st
 	return err
 }
 
+// FillPollsWithVotes does the actual parsing of votes, it creates new vote entries in the polls.
+//
+// It takes the map of existing polls, these polls get filled by calling AddVote on the poll object.
+// Each poll must have a unique parser that is used to parse a vote for the poll, see ParserCustomizer of how this
+// should be done. The parses map must map vote name to the parser instance.
+// Each poll (also by name) must have an EmptyVotePolicy associated with it.
+// If the csv entry is empty (string contains only whitespace) not the parse method of the parser is called but
+// GenerateEmptyVoteForVoter for the policy associated with the poll.
+//
+// If a poll does not have parser / policy associated with it a PollingSemanticError is returned.
+// Also all errors from AddVote are returned.
+// The matrix is also verified with MatchEntries function and any error from this function is returned.
+// The arguments allowMissingVoters and allowMissingPolls determine what should happen if a voter or poll is missing.
+// As described in MatchEntries it is possible that some voters / polls do not appear in the csv.
+// If allowMissingVoters is set to false a PollingSemanticError is returned if a voter is missing.
+// Also if allowMissingPolls is set to false and poll is missing in the csv a PollingSemanticError is returned.
+//
+// If everything is okay this method returns nil as error and the actual voters / polls that appeared in the csv.
+// Especially if allowMissingVoters = false and allowMissingPolls = false the result should return maps that are
+// equivalent to the input maps.
+//
+// Note that if an error is returned it is possible that some of the polls got already filled with votes!
+// In this case not all votes for a poll might be present and the whole operation should be marked as failure and
+// probably none of the votes that already appear in some poll should be used.
 func (m *PollMatrix) FillPollsWithVotes(polls PollMap, voters VoterMap,
 	parsers map[string]VoteParser, policies PolicyMap,
 	allowMissingVoters, allowMissingPolls bool) (actualVoters VoterMap, actualPolls PollMap, err error) {
@@ -524,8 +582,8 @@ func (m *PollMatrix) FillPollsWithVotes(polls PollMap, voters VoterMap,
 	if err != nil {
 		return
 	}
-	// check if there are missing entries and test if this is allowed or not
 
+	// check if there are missing entries and test if this is allowed or not
 	if !allowMissingVoters && len(actualVoters) != len(voters) {
 		// create a list of all missing voters
 		missing := make([]string, 0, len(voters))
