@@ -32,7 +32,7 @@ import (
 	"time"
 )
 
-const version = "0.0.1"
+const version = "v0.1.0"
 
 var currencyHandler = gopolls.SimpleEuroHandler{}
 

@@ -6,7 +6,7 @@ ARCHS="amd64"
 TEMPLATES_DIR="../../../../cmd/poll/templates"
 STATIC_DIR="../../../../cmd/poll/static"
 
-VERSION="0.0.1"
+VERSION="0.1.0"
 
 for os in $OPERATING_SYSTEMS; do
   for arch in $ARCHS; do
