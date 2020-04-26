@@ -77,9 +77,10 @@ limitations under the License.
 {{end}}
 
 {{define "schulzepoll"}}
+    {{$weightSum := .Result.WeightSum}}
     <h4>{{.Skel.GetName}}</h4>
     Number of voters: {{len .Poll.Votes}}<br/>
-    Weight sum of voters: {{.Result.WeightSum}}<br/>
+    Weight sum of voters: {{$weightSum}}<br/>
     Options for the poll are:
     <ul>
         {{range $option := .Skel.Options}}
@@ -103,15 +104,19 @@ limitations under the License.
                 </td>
             </tr>
             {{range $optionID := $rankingGroup}}
+                {{$numLeNo := index $leNo $optionID}}
+                {{$numLeqNo := index $leqNo $optionID}}
                 <tr>
                     <td>
                         {{index $.Skel.Options $optionID}}
                     </td>
                     <td>
-                        {{index $leNo $optionID}}
+                        {{$numLeNo}}
+                        ({{percentage $numLeNo $weightSum}})
                     </td>
                     <td>
-                        {{index $leqNo $optionID}}
+                        {{$numLeqNo}}
+                        ({{percentage $numLeqNo $weightSum}})
                     </td>
                 </tr>
             {{end}}

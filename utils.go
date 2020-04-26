@@ -123,7 +123,7 @@ func (s LowerStringSet) String() string {
 	}
 	first := true
 	var b strings.Builder
-	b.WriteString("{")
+	b.WriteRune('{')
 	for element := range s {
 		if first {
 			first = false
@@ -132,6 +132,6 @@ func (s LowerStringSet) String() string {
 		}
 		b.WriteString(element)
 	}
-	b.WriteString("}")
+	b.WriteRune('}')
 	return b.String()
 }
