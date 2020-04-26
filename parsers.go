@@ -160,7 +160,7 @@ func isIgnoredLine(line string) bool {
 }
 
 // votersLineRx is the regex used to parse a voter line, see ParseVotersLine.
-var votersLineRx = regexp.MustCompile(`^\s*[*]\s+(.+?):\s*(\d+)\s*$`)
+var votersLineRx = regexp.MustCompile(`^\s*[*]\s+(.+?)\s*(?::\s+(\d+)\s*)?$`)
 
 // VotersParser parses voters from a file / string.
 // See ParseVotersLine and ParseVoters for details.
@@ -224,6 +224,7 @@ func (parser *VotersParser) ComputeDefaultMaxLineLength() {
 //
 // Line must be of the form "* <VOTER-NAME>: <WEIGHT>".
 // The name can consist of arbitrary letters, weight must be a positive integer.
+// The weight can also be omitted and defaults to 1.
 // The returned error will be of type ParserValidationError or PollingSyntaxError.
 func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
 	// first validate that s is valid utf-8
@@ -243,7 +244,16 @@ func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
 		return nil, NewPollingSyntaxError(nil, "voter line must be of the form \"* voter: weight\"")
 	}
 	name, weightString := match[1], match[2]
-	weight, weightErr := ParseWeight(weightString)
+	name = strings.TrimSpace(name)
+	weightString = strings.TrimSpace(weightString)
+	var weight Weight
+	var weightErr error
+	if weightString == "" {
+		weight = 1
+	} else {
+		weight, weightErr = ParseWeight(weightString)
+	}
+
 	if weightErr != nil {
 		return nil, NewPollingSyntaxError(weightErr, "voter line does not contain a valid integer (got %s)", weightString)
 	}
@@ -273,6 +283,12 @@ func (parser *VotersParser) ParseVotersLine(s string) (*Voter, error) {
 // Each line must contain one voter entry. Each line must be of the form as described in ParseVotersLine, in short
 //
 // "* <VOTER-NAME>: <WEIGHT>".
+//
+// or
+//
+// "* <VOTER-NAME>"
+//
+// in which case weight defaults to 1.
 //
 // Empty lines and lines starting with "#" are ignored.
 //
