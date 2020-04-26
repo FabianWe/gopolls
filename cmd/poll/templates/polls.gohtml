@@ -52,11 +52,11 @@ limitations under the License.
                         <td>{{$skel.GetName}}</td>
                         <td>{{$skel.SkeletonType}}</td>
                         <td>
-                            {{if eq $skel.SkeletonType "money"}}
+                            {{if eq $skel.SkeletonType "money-skeleton"}}
                                 {{formatCurrency $skel.Value}}
                             {{end}}
 
-                            {{if eq $skel.SkeletonType "basic"}}
+                            {{if eq $skel.SkeletonType "basic-skeleton"}}
                                 {{len $skel.Options}}
                             {{end}}
                         </td>
