@@ -436,7 +436,10 @@ func (h *evaluationHandler) Handle(context *mainContext, buff *bytes.Buffer, r *
 	}
 
 	// next try to parse the results, first generate the parsers
-	parsers, parsersErr := gopolls.CustomizeParsersToMap(polls, gopolls.DefaultParserTemplateMap)
+	// in the csv we only allow raw cents as input
+	defaultParsers := gopolls.GenerateDefaultParserTemplateMap()
+	defaultParsers[gopolls.MedianPollType] = gopolls.NewMedianVoteParser(gopolls.NewRawCentCurrencyParser())
+	parsers, parsersErr := gopolls.CustomizeParsersToMap(polls, defaultParsers)
 	if parsersErr != nil {
 		return render(parsersErr)
 	}

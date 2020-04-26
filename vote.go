@@ -68,13 +68,16 @@ type ParserCustomizer interface {
 
 // DefaultParserTemplateMap contains default templates for BasicPollType, MedianPollType and SchulzePollType.
 // Of course it can be extended.
-var DefaultParserTemplateMap = make(map[string]ParserCustomizer, 3)
+// The easiest way to extend the default parsers is use to either insert values directly here or, if you don't want
+// that, generate a fresh map with GenerateDefaultParserTemplateMap.
+var DefaultParserTemplateMap = GenerateDefaultParserTemplateMap()
 
-// init adds default templates
-func init() {
-	DefaultParserTemplateMap[BasicPollType] = NewBasicVoteParser()
-	DefaultParserTemplateMap[MedianPollType] = NewMedianVoteParser(DefaultCurrencyHandler)
-	DefaultParserTemplateMap[SchulzePollType] = NewSchulzeVoteParser(-1)
+func GenerateDefaultParserTemplateMap() map[string]ParserCustomizer {
+	res := make(map[string]ParserCustomizer, 3)
+	res[BasicPollType] = NewBasicVoteParser()
+	res[MedianPollType] = NewMedianVoteParser(DefaultCurrencyHandler)
+	res[SchulzePollType] = NewSchulzeVoteParser(-1)
+	return res
 }
 
 // CustomizeParsers customizes parser templates for each poll.
