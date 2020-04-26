@@ -16,7 +16,7 @@ For now you can hav a look at the [docs on godocs](https://godoc.org/github.com/
 This project comes with a demo app that builds a simple (and not good / production ready) webserver.
 The code can be found in [cmd/poll](cmd/poll).
 
-There are binary [releases](releases) of this app for linux, mac and Windows.
+There are binary [releases](https://github.com/FabianWe/gopolls/releases) of this app for linux, mac and Windows.
 Just download the `.zip` file and execute the binary.
 
 As already mentioned there is no documentation yet, so usage examples will follow once the API
