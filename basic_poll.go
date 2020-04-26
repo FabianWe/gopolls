@@ -177,12 +177,11 @@ func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (Abstract
 		return vote, nil
 	}
 
-	allowedNoString := strings.Join(parser.NoValues, ", ")
-	allowedAyeString := strings.Join(parser.AyeValues, ", ")
-	allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
-
 	// try ranking style, but only if this is allowed
 	if !parser.AllowRankingStyle {
+		allowedNoString := strings.Join(parser.NoValues, ", ")
+		allowedAyeString := strings.Join(parser.AyeValues, ", ")
+		allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
 		return nil,
 			NewPollingSyntaxError(nil, "invalid option (\"%s\") for basic vote (\"%s\"), allowed are: no: \"%s\", aye: \"%s\", abstention",
 				s, allowedNoString, allowedAyeString, allowedAbstentionString)
@@ -192,6 +191,9 @@ func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (Abstract
 		return vote, nil
 	}
 
+	allowedNoString := strings.Join(parser.NoValues, ", ")
+	allowedAyeString := strings.Join(parser.AyeValues, ", ")
+	allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
 	// no style matched ==> error
 	err := NewPollingSyntaxError(nil, "invalid option (\"%s\") for basic vote , allowed are: no: \"%s\", aye: \"%s\", abstention: \"%s\" or ranking style",
 		s, allowedNoString, allowedAyeString, allowedAbstentionString)
