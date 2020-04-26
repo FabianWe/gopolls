@@ -41,6 +41,8 @@ var currencyHandler = gopolls.SimpleEuroHandler{}
 var templateRoot string
 var staticRoot string
 var comma rune
+var port uint64
+var host string
 
 type mainContext struct {
 	Voters         []*gopolls.Voter
@@ -603,7 +605,7 @@ func main() {
 	http.HandleFunc("/evaluate", toHandleFunc(evaluateH, &context))
 	http.HandleFunc("/home", toHandleFunc(mainH, &context))
 	http.HandleFunc("/about", toHandleFunc(aboutH, &context))
-	addr := "localhost:8080"
+	addr := fmt.Sprintf("%s:%d", host, port)
 	log.Printf("Running server on %s\n", addr)
 	fmt.Printf("Visit http://%s/home in your browser\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
@@ -661,6 +663,8 @@ func parseArgs() {
 	flag.StringVar(&rootString, "assets", "", "Directory in which the assets (templates and static) are, defaults to dir of executable")
 	var commaVar string
 	flag.StringVar(&commaVar, "comma", ";", "Comma separator for csv files, for historical reasons defaults to \";\"")
+	flag.Uint64Var(&port, "port", 8080, "The port to run the web server on, defaults to 8080")
+	flag.StringVar(&host, "host", "localhost", "The address to run the webserver on, defaults to \"localhost\"")
 	// test if help was given
 	if len(os.Args) > 1 && os.Args[1] == "help" {
 		printUsage()
