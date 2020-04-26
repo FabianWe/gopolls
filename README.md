@@ -38,3 +38,6 @@ License.
 
 It also uses a template from the [pure-css Layouts page](https://purecss.io/layouts) (also contained
 in this distribution).
+
+All these files are contained [here](cmd/poll/static/pure-release-1.0.1) and [here](cmd/poll/static/layout) and are not
+covered but my copyright but the copyrights mentioned above.
