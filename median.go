@@ -94,8 +94,7 @@ func (parser *MedianVoteParser) WithMaxValue(maxValue MedianUnit) *MedianVotePar
 	}
 }
 
-// CustomizeForPoll implements ParserCustomizer and returns a new parser with maxValue set if a
-// if a *MedianPoll is given.
+// CustomizeForPoll implements ParserCustomizer and returns a new parser with maxValue set if a *MedianPoll is given.
 func (parser *MedianVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCustomizer, error) {
 	if asMedianPoll, ok := poll.(*MedianPoll); ok {
 		return parser.WithMaxValue(asMedianPoll.Value), nil

@@ -44,9 +44,9 @@ func (value CurrencyValue) String() string {
 
 // Equals tests if two CurrencyValue objects are identical.
 //
-// Not that this method does not do "semantic" comparison on the currency, for example one could say tat
+// Not that this method does not do "semantic" comparison on the currency, for example one could say that
 // {42, "€"} is equal to {42, "EUR"}.
-// It directly compares ValueCents and Currency.
+// This function however directly compares ValueCents and Currency.
 func (value CurrencyValue) Equals(other CurrencyValue) bool {
 	return value.ValueCents == other.ValueCents &&
 		value.Currency == other.Currency

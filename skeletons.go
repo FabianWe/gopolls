@@ -34,7 +34,7 @@ const (
 // Thus a skeleton is the description (which options are there etc.) while the poll itself contains the logic of
 // evaluating it.
 //
-// We have two different skeletons at the moment (but three poll implementations:
+// We have two different skeletons at the moment (but three poll implementations):
 //
 // MoneyPollSkeleton, has a name and a money value, is usually converted to a MedianPoll.
 //
