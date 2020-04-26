@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // CurrencyValue represents a money value in a certain currency.
@@ -52,6 +53,44 @@ func (value CurrencyValue) Equals(other CurrencyValue) bool {
 		value.Currency == other.Currency
 }
 
+// Copy creates a copy of the value with exactly the same content.
+func (value CurrencyValue) Copy() CurrencyValue {
+	return CurrencyValue{
+		ValueCents: value.ValueCents,
+		Currency:   value.Currency,
+	}
+}
+
+// DefaultFormatString returns a standard format and might be useful for formatters.
+// It returns strings of the form 0.09, 0.21, 21.42 €.
+// The separator (in the examples the dot) can be configured with sep.
+func (value CurrencyValue) DefaultFormatString(sep string) string {
+	if value.ValueCents < 0 {
+		positiveValue := CurrencyValue{
+			ValueCents: -value.ValueCents,
+			Currency:   value.Currency,
+		}
+		return "-" + positiveValue.DefaultFormatString(sep)
+	}
+	currencyStr := ""
+	if value.Currency != "" {
+		currencyStr = " " + value.Currency
+	}
+	switch {
+	case value.ValueCents < 10:
+		return fmt.Sprintf("0%s0%d%s", sep, value.ValueCents, currencyStr)
+	case value.ValueCents < 100:
+		return fmt.Sprintf("0%s%d%s", sep, value.ValueCents, currencyStr)
+	default:
+		fullEuro := value.ValueCents / 100
+		remainingCents := value.ValueCents % 100
+		if remainingCents < 10 {
+			return fmt.Sprintf("%d%s0%d%s", fullEuro, sep, remainingCents, currencyStr)
+		}
+		return fmt.Sprintf("%d%s%d%s", fullEuro, sep, remainingCents, currencyStr)
+	}
+}
+
 // CurrencyFormatter formats a currency value to a string.
 type CurrencyFormatter interface {
 	Format(value CurrencyValue) string
@@ -74,12 +113,9 @@ type CurrencyHandler interface {
 
 // SimpleEuroHandler is an implementation of CurrencyHandler (and thus CurrencyFormatter and CurrencyParser).
 //
-// It is, at the moment, the only implementation available.
 //
 // It returns always strings of the form "1.23 €" or "1.23" (depending on whether Currency is set to an empty string
 // or not).
-// Note that this formatter always uses "€" as the currency symbol, even if Currency was set to "$".
-//
 // The parser allows strings of the form "42€", "21.42 €", "-42€", "21,42 €" (both , and . are allowed to be used as
 // decimal separator, no thousands separator is supported).
 type SimpleEuroHandler struct{}
@@ -92,31 +128,7 @@ var (
 
 // Format implements the CurrencyFormatter interface.
 func (h SimpleEuroHandler) Format(value CurrencyValue) string {
-	if value.ValueCents < 0 {
-		positiveValue := CurrencyValue{
-			ValueCents: -value.ValueCents,
-			Currency:   value.Currency,
-		}
-		return "-" + h.Format(positiveValue)
-	}
-	currencyStr := ""
-	// this simple formatter does only allow €
-	if value.Currency != "" {
-		currencyStr = " €"
-	}
-	switch {
-	case value.ValueCents < 10:
-		return fmt.Sprintf("0,0%d%s", value.ValueCents, currencyStr)
-	case value.ValueCents < 100:
-		return fmt.Sprintf("0,%d%s", value.ValueCents, currencyStr)
-	default:
-		fullEuro := value.ValueCents / 100
-		remainingCents := value.ValueCents % 100
-		if remainingCents < 10 {
-			return fmt.Sprintf("%d,0%d%s", fullEuro, remainingCents, currencyStr)
-		}
-		return fmt.Sprintf("%d,%d%s", fullEuro, remainingCents, currencyStr)
-	}
+	return value.DefaultFormatString(".")
 }
 
 // simpleEuroRx is the regex used to parse values in with the SimpleEuroHandler.
@@ -135,7 +147,7 @@ func (h SimpleEuroHandler) Parse(s string) (CurrencyValue, error) {
 	if euroErr != nil {
 		// in nearly all other cases we panic because of invalid syntax, in this case
 		// not (sequence \d too long for int, seldom but could legally happen)
-		return res, euroErr
+		return res, NewPollingSyntaxError(euroErr, "invalid currency integer")
 	}
 	fullEuroCents *= 100
 
@@ -172,4 +184,30 @@ func (h SimpleEuroHandler) Parse(s string) (CurrencyValue, error) {
 	res.Currency = currencySymbol
 
 	return res, nil
+}
+
+// RawCentCurrencyHandler implements CurrencyHandler.
+// In th Parse method it accepts plain integers and reads them as plain integers, no currency
+// symbol is allowed there.
+// So the integer 10 would be translated to a currencly value "0.10" (10 cents).
+// In its Format method it returns DefaultFormatString with . as separator.
+type RawCentCurrencyHandler struct{}
+
+func NewRawCentCurrencyParser() RawCentCurrencyHandler {
+	return RawCentCurrencyHandler{}
+}
+
+func (h RawCentCurrencyHandler) Parse(s string) (CurrencyValue, error) {
+	res := CurrencyValue{}
+	s = strings.TrimSpace(s)
+	intVal, intErr := strconv.Atoi(s)
+	if intErr != nil {
+		return res, NewPollingSyntaxError(intErr, "invalid currency integer")
+	}
+	res.ValueCents = intVal
+	return res, nil
+}
+
+func (h RawCentCurrencyHandler) Format(value CurrencyValue) string {
+	return value.DefaultFormatString(".")
 }
