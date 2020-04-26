@@ -17,6 +17,7 @@ package gopolls
 import (
 	"math"
 	"strconv"
+	"strings"
 )
 
 // Weight is the type used to reference voter weights.
@@ -76,4 +77,61 @@ func NewDuplicateError(msg string) DuplicateError {
 
 func (err DuplicateError) Error() string {
 	return err.Msg
+}
+
+// LowerStringSet is a set of lower case strings.
+type LowerStringSet map[string]struct{}
+
+// NewStringSet returns a new set given its elements, all elements are transformed to lower case.
+func NewLowerStringSet(elements []string) LowerStringSet {
+	res := make(LowerStringSet, len(elements))
+	for _, element := range elements {
+		res[strings.ToLower(element)] = struct{}{}
+	}
+	return res
+}
+
+// Insert inserts a new element, the element is transformed to lower case.
+func (s LowerStringSet) Insert(element string) {
+	s[strings.ToLower(element)] = struct{}{}
+}
+
+// Extend adds all elements to the set, all elements are transformed to lower case.
+func (s LowerStringSet) Extend(elements []string) {
+	for _, element := range elements {
+		s[strings.ToLower(element)] = struct{}{}
+	}
+}
+
+// ContainsLowercase returns true if element is contained within s.
+// Note that element must already be lower case, otherwise this method will not work correctly!
+func (s LowerStringSet) ContainsLowercase(element string) bool {
+	_, contains := s[element]
+	return contains
+}
+
+// Contains returns true if the lowercase version of s is contained within s.
+// The difference to ContainsLowercase is that this method will always convert s to lower case.
+func (s LowerStringSet) Contains(element string) bool {
+	_, contains := s[strings.ToLower(element)]
+	return contains
+}
+
+func (s LowerStringSet) String() string {
+	if len(s) == 0 {
+		return "{}"
+	}
+	first := true
+	var b strings.Builder
+	b.WriteString("{")
+	for element := range s {
+		if first {
+			first = false
+		} else {
+			b.WriteString(", ")
+		}
+		b.WriteString(element)
+	}
+	b.WriteString("}")
+	return b.String()
 }

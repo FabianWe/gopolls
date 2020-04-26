@@ -73,8 +73,8 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 //
 // First a simple string that describes No, Aye/Yes and Abstention.
 // The lists of valid strings for these options can be configured with the NoValues, AyeValues and AbstentionValues
-// lists.
-// These lists must be all lower case strings defining the valid options.
+// sets.
+// These sets must be all lower case strings defining the valid options.
 // The defaults, as created by NewBasicVoteParser, are (English and German words):
 // {"+", "n", "no", "nein", "dagegen"} for NoValues,
 // {"-", "a", "aye", "y", "yes", "ja", "dafür"} for AyeValues and
@@ -91,9 +91,9 @@ func NewBasicVote(voter *Voter, choice BasicPollAnswer) *BasicVote {
 //
 // It also implements ParserCustomizer.
 type BasicVoteParser struct {
-	NoValues          []string
-	AyeValues         []string
-	AbstentionValues  []string
+	NoValues          LowerStringSet
+	AyeValues         LowerStringSet
+	AbstentionValues  LowerStringSet
 	AllowRankingStyle bool
 }
 
@@ -104,9 +104,9 @@ func NewBasicVoteParser() *BasicVoteParser {
 	ayeDefaults := []string{"+", "a", "aye", "y", "yes", "ja", "dafür"}
 	abstentionDefaults := []string{"/", "abstention", "enthaltung"}
 	return &BasicVoteParser{
-		NoValues:          noDefaults,
-		AyeValues:         ayeDefaults,
-		AbstentionValues:  abstentionDefaults,
+		NoValues:          NewLowerStringSet(noDefaults),
+		AyeValues:         NewLowerStringSet(ayeDefaults),
+		AbstentionValues:  NewLowerStringSet(abstentionDefaults),
 		AllowRankingStyle: true,
 	}
 }
@@ -122,24 +122,15 @@ func (parser *BasicVoteParser) CustomizeForPoll(poll AbstractPoll) (ParserCustom
 		reflect.TypeOf(poll))
 }
 
-func (parser *BasicVoteParser) containsString(candidates []string, s string) bool {
-	s = strings.ToLower(s)
-	for _, candidate := range candidates {
-		if candidate == s {
-			return true
-		}
-	}
-	return false
-}
-
 func (parser *BasicVoteParser) basicStyle(s string, voter *Voter) (*BasicVote, bool) {
+	s = strings.ToLower(s)
 	var answer BasicPollAnswer = -1
 	switch {
-	case parser.containsString(parser.NoValues, s):
+	case parser.NoValues.ContainsLowercase(s):
 		answer = No
-	case parser.containsString(parser.AyeValues, s):
+	case parser.AyeValues.ContainsLowercase(s):
 		answer = Aye
-	case parser.containsString(parser.AbstentionValues, s):
+	case parser.AbstentionValues.ContainsLowercase(s):
 		answer = Abstention
 	}
 	if answer < 0 {
@@ -179,24 +170,18 @@ func (parser *BasicVoteParser) ParseFromString(s string, voter *Voter) (Abstract
 
 	// try ranking style, but only if this is allowed
 	if !parser.AllowRankingStyle {
-		allowedNoString := strings.Join(parser.NoValues, ", ")
-		allowedAyeString := strings.Join(parser.AyeValues, ", ")
-		allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
 		return nil,
 			NewPollingSyntaxError(nil, "invalid option (\"%s\") for basic vote (\"%s\"), allowed are: no: \"%s\", aye: \"%s\", abstention",
-				s, allowedNoString, allowedAyeString, allowedAbstentionString)
+				s, parser.NoValues, parser.AyeValues, parser.AbstentionValues)
 	}
 	vote, ok = parser.rankingStyle(s, voter)
 	if ok {
 		return vote, nil
 	}
 
-	allowedNoString := strings.Join(parser.NoValues, ", ")
-	allowedAyeString := strings.Join(parser.AyeValues, ", ")
-	allowedAbstentionString := strings.Join(parser.AbstentionValues, ", ")
 	// no style matched ==> error
 	err := NewPollingSyntaxError(nil, "invalid option (\"%s\") for basic vote , allowed are: no: \"%s\", aye: \"%s\", abstention: \"%s\" or ranking style",
-		s, allowedNoString, allowedAyeString, allowedAbstentionString)
+		s, parser.NoValues, parser.AyeValues, parser.AbstentionValues)
 	return nil, err
 }
 
