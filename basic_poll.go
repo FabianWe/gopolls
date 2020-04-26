@@ -100,8 +100,8 @@ type BasicVoteParser struct {
 // NewBasicVoteParser returns a new BasicVoteParser with the default strings as described in the type description
 // and AllowRankingStyle set to true.
 func NewBasicVoteParser() *BasicVoteParser {
-	noDefaults := []string{"+", "n", "no", "nein", "dagegen"}
-	ayeDefaults := []string{"-", "a", "aye", "y", "yes", "ja", "dafür"}
+	noDefaults := []string{"-", "n", "no", "nein", "dagegen"}
+	ayeDefaults := []string{"+", "a", "aye", "y", "yes", "ja", "dafür"}
 	abstentionDefaults := []string{"/", "abstention", "enthaltung"}
 	return &BasicVoteParser{
 		NoValues:          noDefaults,
