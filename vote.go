@@ -1,4 +1,4 @@
-// Copyright 2020 Fabian Wenzelmann <fabianwen@posteo.eu>
+// Copyright 2020, 2021 Fabian Wenzelmann <fabianwen@posteo.eu>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ type VoteParser interface {
 // For example a median poll can be customized by setting a max value, that is the maximal value this parser will parse.
 // The workflow then is this: Create a parser "template" with the default options you want to use and then customize
 // it for each poll with CustomizeForPoll.
-// An example and a helper function is given CustomizeParsers.
+// An example and a helper function is given in CustomizeParsers.
 //
 // In the median example: The template consists of a parser that allows all valid numbers / integers.
 // It is then customized for a certain poll by setting the max value of that poll.
@@ -212,7 +212,7 @@ func (w *VotesCSVWriter) GenerateEmptyTemplate(voters []*Voter, skels []Abstract
 // MaxNumLines is the number of lines that are allowed in a polls file (including head). Therefor it must be a number >= 1.
 // MaxRecordLength is th maximal length in bytes (not runes) a record in a row is allowed to have.
 // MaxVotersNameLength is the maximal length a voter name is allowed to have.
-// MaxPollNameLengthis the maximal length a poll name is allowed to have.
+// MaxPollNameLength is the maximal length a poll name is allowed to have.
 type VotesCSVReader struct {
 	Sep                 rune
 	csv                 *csv.Reader
@@ -431,7 +431,6 @@ func (policy EmptyVotePolicy) GenerateEmptyVoteForVoter(voter *Voter, poll Abstr
 			voter.Name, reflect.TypeOf(poll), ErrEmptyPollPolicy)
 	}
 	// in all other cases it must be called with a VoteGenerator
-	// must be called with a VoteGenerator
 	asGenerator, ok := poll.(VoteGenerator)
 	if !ok {
 		return nil, NewPollTypeError("can only generate a poll for polls that implement VoteGenerator, got type %s",

@@ -1,4 +1,4 @@
-// Copyright 2020 Fabian Wenzelmann <fabianwen@posteo.eu>
+// Copyright 2020, 2021 Fabian Wenzelmann <fabianwen@posteo.eu>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ type PollSkeletonMap map[string]AbstractPollSkeleton
 //
 // It returns the number of bytes written and any error that occurred writing to w.
 //
-// It needs a currencyFormatter to write MoneyPollSkeleton instances.
+// It needs a CurrencyFormatter to write MoneyPollSkeleton instances.
 func DumpAbstractPollSkeleton(skel AbstractPollSkeleton, w io.Writer, currencyFormatter CurrencyFormatter) (int, error) {
 	switch typedSkel := skel.(type) {
 	case *MoneyPollSkeleton:
@@ -228,7 +228,7 @@ func NewPollSkeletonCollection(title string) *PollSkeletonCollection {
 	}
 }
 
-// PollSkeletonCollection
+// NumGroups returns the number of groups in the collection.
 func (coll *PollSkeletonCollection) NumGroups() int {
 	return len(coll.Groups)
 }
@@ -242,7 +242,7 @@ func (coll *PollSkeletonCollection) NumSkeletons() int {
 	return res
 }
 
-// HasPolls returns true if there is at least one poll skeleton in any of the groups.
+// HasSkeleton returns true if there is at least one poll skeleton in any of the groups.
 func (coll *PollSkeletonCollection) HasSkeleton() bool {
 	for _, group := range coll.Groups {
 		if group.NumSkeletons() > 0 {

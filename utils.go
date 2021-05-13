@@ -82,7 +82,7 @@ func (err DuplicateError) Error() string {
 // LowerStringSet is a set of lower case strings.
 type LowerStringSet map[string]struct{}
 
-// NewStringSet returns a new set given its elements, all elements are transformed to lower case.
+// NewLowerStringSet returns a new set given its elements, all elements are transformed to lower case.
 func NewLowerStringSet(elements []string) LowerStringSet {
 	res := make(LowerStringSet, len(elements))
 	for _, element := range elements {

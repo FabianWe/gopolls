@@ -1,4 +1,4 @@
-// Copyright 2020 Fabian Wenzelmann <fabianwen@posteo.eu>
+// Copyright 2020, 2021 Fabian Wenzelmann <fabianwen@posteo.eu>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,12 +24,12 @@ func TestSimpleEuroHandlerFormat(t *testing.T) {
 		in       int
 		expected string
 	}{
-		{1, "0,01 €"},
-		{99, "0,99 €"},
-		{100, "1,00 €"},
-		{4209, "42,09 €"},
-		{-42, "-0,42 €"},
-		{-1337, "-13,37 €"},
+		{1, "0.01 €"},
+		{99, "0.99 €"},
+		{100, "1.00 €"},
+		{4209, "42.09 €"},
+		{-42, "-0.42 €"},
+		{-1337, "-13.37 €"},
 	}
 
 	handler := gopolls.SimpleEuroHandler{}
